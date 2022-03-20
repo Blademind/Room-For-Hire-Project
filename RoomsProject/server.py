@@ -4,8 +4,6 @@ import time
 from socket import *
 import select
 import threading
-import folium
-
 
 class Server:
     def __init__(self):

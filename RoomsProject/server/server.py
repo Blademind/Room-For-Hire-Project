@@ -6,7 +6,7 @@ from socket import *
 import select
 import threading
 import sqlite3
-
+import os
 """
 Server by Alon Levy
 """
@@ -36,7 +36,7 @@ class Server:
             send = pickle.dumps(len)
             sock.send(send)
             while 1:
-                data = txt.read(BUF)
+                data = txt.read(self.__BUF)
                 if not data:
                     break
                 sock.send(data)
@@ -66,7 +66,7 @@ class Server:
                             self.registeruser(data)
                         elif type(data) == list and len(data) == 2:
                             data = self.loginuser(data)
-                        sock.send(f'Success {data[0][0]}'.encode())
+                        sock.send(f'Success {data[0][1]}'.encode())
                     except:
                         sock.send('Error'.encode())
 

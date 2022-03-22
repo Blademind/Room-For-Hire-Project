@@ -11,57 +11,57 @@ from tkintermapview import TkinterMapView
 Client by Alon Levy
 """
 
-user = 'Guest'
-
 
 class Client:
-    def __init__(self, user):
+    def __init__(self):
         self.client = socket(AF_INET, SOCK_STREAM)
-        self.__BUF = 1024
-        self.__ADDR = ('127.0.0.1', 50000)  # where to connect
-        self.client.connect(self.__ADDR)
+        self.BUF = 1024
+        self.ADDR = ('127.0.0.1', 50000)  # where to connect
+        self.client.connect(self.ADDR)
+        self.__user = ['Guest', None]
         _thread.start_new_thread(self.listen,())
         print('___SUCCESS___')
-        self.main(user)
+        self.main()
 
     def listen(self):
         while 1:
-            data = self.client.recv(self.__BUF)
+            data = self.client.recv(self.BUF)
             if not data:
                 break
             tkinter.messagebox.showinfo('Message from Server', data.decode())
             if 'Success' in data.decode():
-                user = data.decode()[8:]
-                print(user)
-                user1.config(text=f'Welcome, {user}')
+                self.__user[0] = data.decode()[8:]
+                self.__user[1] = self.__attempt
+                user1.config(text=f'Welcome,\n{self.__user[0]}')
 
-    def main(self, user):
+    def main(self):
         global user1
         root = Tk()
         reg1 = Button(root, command=self.register, text='Register', font=('Helvetica', 11), cursor='hand2',bg='#252221', fg='lightgray', activebackground='lightgray',
                    activeforeground='#252221')
-        reg1.pack(side=LEFT, anchor=N)
+        reg1.grid(column=0, row=0)
         log1 = Button(root, command=self.login, text='Login', font=('Helvetica', 11), cursor='hand2',
                       bg='#252221', fg='lightgray', activebackground='lightgray',
                       activeforeground='#252221')
-        log1.pack(side=LEFT, anchor=N)
-        user1 = Label(root, text=f'Welcome {user}', font=('Helvetica', 11), cursor='hand2',
+        log1.grid(column=1, row=0,sticky=W)
+        user1 = Label(root, text=f'Welcome,\n{self.__user[0]}', font=('Helvetica', 12),
                       bg='#252221', fg='lightgray', activebackground='lightgray',
                       activeforeground='#252221')
-        user1.pack(side=RIGHT, anchor=N)
+        user1.grid(column=5, row=0,sticky=E)
         findroom = Button(root, command=self.worldrooms, width=25,height=2,
                       text='Find a Room', font=('Helvetica', 14),
                       cursor='hand2',bg='#252221', fg='lightgray', activebackground='lightgray',
                       activeforeground='#252221')
-        findroom.pack(anchor=W, pady=50, padx=20)
-        addroom = Button(root, command=lambda: self.pop(reg), width=25,height=2,
+        findroom.grid(row=1,column=2, pady=10, padx=20)
+
+        addroom = Button(root, command=lambda: self.pop(root), width=25,height=2,
                       text='Add a Room', font=('Helvetica', 14),
                       cursor='hand2',bg='#252221', fg='lightgray', activebackground='lightgray',
                       activeforeground='#252221')
-        addroom.pack(anchor=W,pady=10, padx=20)
+        addroom.grid(row=2,column=2, pady=20, padx=20)
         close = Button(root, command=lambda: self.pop(root), text='Close', font=('Helvetica', 11), cursor='hand2',bg='#252221', fg='lightgray', activebackground='lightgray',
                    activeforeground='#252221')
-        close.pack(anchor=E)
+        close.grid(row=3, column=5, sticky=E)
         # menus
         menu = Menu(root)
         filemenu = Menu(menu, tearoff=0)
@@ -70,13 +70,15 @@ class Client:
         filemenu.add_command(label='Exit', command=lambda: self.pop(root))
         menu.add_cascade(label="More", menu=filemenu)
         root.config(menu=menu, bg='lightgray')
-        self.midwin(root, 550, 300)
+        self.midwin(root, 520, 300)
         root.mainloop()
 
     def worldrooms(self):
-        root2 = Tk()
-        map_widget = TkinterMapView(root2, width=1000, height=700, corner_radius=0)
-        map_widget.pack(fill="both", expand=True)
+        root_tk = Toplevel()
+        root_tk.geometry('800x600')
+        map_widget = TkinterMapView(root_tk, width=800, height=600, corner_radius=0)
+        map_widget.place(relx=0.5, rely=0.5, anchor=CENTER)
+        root_tk.mainloop()
 
     def register(self):
         reg = Tk()
@@ -101,7 +103,7 @@ class Client:
         pwd_again = Entry(right_frame, font=f, show='*')
 
         register = Button(right_frame,
-                          command=lambda: [self.client.send(pickle.dumps([name.get(),email.get(),country.get(),var.get(), pwd.get()])), reg.destroy()],
+                          command=lambda: [self.regsend(name.get(),email.get(),country.get(),var.get(), pwd.get()), reg.destroy()],
                           width=15, text='Register', font=('Helvetica', 11), cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
                    activeforeground='#252221')
         close = Button(right_frame, command=reg.destroy, text='Close', width=15, font=('Helvetica', 11), cursor='hand2',bg='#252221', fg='lightgray', activebackground='lightgray',
@@ -121,6 +123,9 @@ class Client:
         self.midwin(reg,500,400)
         reg.mainloop()
 
+    def regsend(self, name, email, country, var, pwd):
+        self.client.send(pickle.dumps([name, email, country, var, pwd]))
+        self.__attempt = pwd
     def login(self):
         log = Tk()
         log.config(bg='#252221')
@@ -133,7 +138,7 @@ class Client:
         email = Entry(right_frame,font=f)
         pwd = Entry(right_frame, font=f, show='*')
         login = Button(right_frame,
-                          command=lambda: [self.client.send(pickle.dumps([email.get(), pwd.get()])), log.destroy()],
+                          command=lambda: [self.loginsend(email.get(), pwd.get(), log)],
                           width=15, text='Login', font=('Helvetica', 11), cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
                    activeforeground='#252221')
         close = Button(right_frame, command=log.destroy, text='Close', width=15, font=('Helvetica', 11), cursor='hand2',bg='#252221', fg='lightgray', activebackground='lightgray',
@@ -145,6 +150,11 @@ class Client:
         right_frame.pack()
         self.midwin(log,500,400)
         log.mainloop()
+
+    def loginsend(self, email, pwd, log):
+        self.client.send(pickle.dumps([email, pwd]))
+        self.__attempt = pwd
+        log.destroy()
 
     # Do you wish to exit the program entirely?
     def pop(self, root):
@@ -274,4 +284,4 @@ class Client:
 
 if __name__ == '__main__':
     print('___INITIALIZING___')
-    c = Client(user)
+    c = Client()

@@ -26,18 +26,18 @@ class Server:
         self.conn = sqlite3.connect('users.db')
         self.conn2 = sqlite3.connect('create.db')
         self.cursor = self.conn.cursor()
-        self.cursor2 = self.conn2.cursor()
         self.cursor.execute('CREATE TABLE IF NOT EXISTS Registered(Fullname TEXT, Email TEXT, Gender TEXT,'
                             ' Country TEXT, LastOrder TEXT, Password TEXT);')
-        self.cursor2.execute('CREATE TABLE IF NOT EXISTS Offered(By TEXT, Coordination TEXT,'
+        self.cursor2 = self.conn2.cursor()
+        self.cursor2.execute('CREATE TABLE IF NOT EXISTS Offered(RoomName TEXT,By TEXT, Coordination TEXT,'
                              ' Price FLOAT, LendTime FLOAT);')
         self.conn.close()
         self.conn2.close()
         print('___SUCCESS___')
 
     def sendcords(self, sock):
-        with open('cords.txt', 'rb') as txt:
-            len = os.path.getsize(f'{os.path.dirname(os.getcwd())}/server/cords.txt')
+        with open('create.db', 'rb') as txt:
+            len = os.path.getsize(f'{os.path.dirname(os.getcwd())}/server/create.db')
             send = pickle.dumps(len)
             sock.send(send)
             while 1:
@@ -67,8 +67,17 @@ class Server:
                         break
                     datacontent = data.decode()
                     if 'ADD' in datacontent:
-                        with open('cords.txt', 'a') as txt:
-                            txt.write(f'{data.decode()[4:]}\n')
+                        values = datacontent[4:].split(', ')
+                        self.conn2 = sqlite3.connect('create.db')
+                        cursor = self.conn2.cursor()
+                        cursor.execute(
+                            'INSERT INTO Offered (RoomName, By, Coordination,'
+                            ' Price, LendTime) VALUES (?,?,?,?,?)',
+                            (values[0], values[4], values[1], values[2], values[3]))
+                        self.conn2.commit()
+                        self.conn2.close()
+                        # with open('cords.txt', 'a') as txt:
+                        #     txt.write(f'{data.decode()[4:]}\n')
                     elif datacontent == 'CRED':
                         data = sock.recv(self.BUF)
                         try:

@@ -27,12 +27,12 @@ class Client:
     def getfile(self):
         data = self.client.recv(self.BUF)
         img = pickle.loads(data)
-        with open('cords.txt', 'w') as txt:
+        with open('create.db', 'wb') as txt:
             s = 0
             while s < img:
                 data2 = self.client.recv(self.BUF)
                 if not data2: break
-                txt.write(data2.decode())
+                txt.write(data2)
                 s += len(data2)
 
     def listen(self):
@@ -58,8 +58,8 @@ class Client:
                       activeforeground='#252221')
         reg1.grid(column=0, row=0)
         self.log1 = Button(self.root, command=self.login, text='Login', font=('Helvetica', 11), cursor='hand2',
-                      bg='#252221', fg='lightgray', activebackground='lightgray',
-                      activeforeground='#252221')
+                           bg='#252221', fg='lightgray', activebackground='lightgray',
+                           activeforeground='#252221')
         self.log1.grid(column=1, row=0, sticky=W)
         self.user1 = Label(self.root, text=f'Welcome,\n{self.__user[0]}', font=('Helvetica', 12),
                            bg='#252221', fg='lightgray', activebackground='lightgray',
@@ -76,7 +76,8 @@ class Client:
                          cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
                          activeforeground='#252221')
         addroom.grid(row=2, column=2, pady=20, padx=20)
-        close = Button(self.root, command=lambda: self.pop(self.root), text='Close', font=('Helvetica', 11), cursor='hand2',
+        close = Button(self.root, command=lambda: self.pop(self.root), text='Close', font=('Helvetica', 11),
+                       cursor='hand2',
                        bg='#252221', fg='lightgray', activebackground='lightgray',
                        activeforeground='#252221')
         close.grid(row=3, column=5, sticky=E)
@@ -92,11 +93,8 @@ class Client:
         self.root.mainloop()
 
     def searchplace(self, *args):
-        try:
-            self.map.set_address(self.message.get())
-            self.message.delete(0, END)
-        except:
-            pass
+        self.map.set_address(self.message.get())
+        self.message.delete(0, END)
 
     def worldrooms(self):
         self.root2 = Toplevel()
@@ -107,25 +105,13 @@ class Client:
         self.map.set_address('Israel')
         self.map.set_zoom(7)
         self.map.pack(expand=True)
-        with open('cords.txt') as cords:
-            self.text = cords.readline().split(', ')
-            if len(self.text) == 2:
-                self.text[1] = self.text[1][:self.text[1].find('\\')]
-                self.cord = self.text[1].split(' ')
-                self.cord[0] = float(self.cord[0])
-                self.cord[1] = float(self.cord[1])
-                cords.readline()
-                while 1:
-                    try:
-                        self.map.set_marker(self.cord[0], self.cord[1], text=self.text[0], command=self.askroom)
-                        self.text = cords.readline().split(', ')
-                        self.text[1] = self.text[1][:self.text[1].find('\\')]
-                        self.cord = self.text[1].split(' ')
-                        self.cord[0] = float(self.cord[0])
-                        self.cord[1] = float(self.cord[1])
-                        cords.readline()
-                    except IndexError:
-                        break
+        conn = sqlite3.connect('create.db')
+        cursor = conn.cursor().execute('SELECT * FROM Offered')
+        all = cursor.fetchall()
+        conn.close()
+        for row in all:
+            self.cord = row[2].split(' ')
+            self.map.set_marker(float(self.cord[0]), float(self.cord[1]), text=row[0], command=self.askroom)
 
         self.message = Entry(self.root2, bg='lightgray', fg='#252221',
                              font=("Helvetica", 15, 'bold'), width=60)  # user entry, sent to server
@@ -143,7 +129,6 @@ class Client:
 
     # WIP 1
     def askroom(self, *args):
-        roomname = self.text[0]
         pass
 
     def register(self):
@@ -171,7 +156,7 @@ class Client:
         self.pwd_again = Entry(self.right_frame, font=f, show='*')
 
         register = Button(self.right_frame,
-                          command=lambda: [self.regsend, self.reg.destroy()],
+                          command=self.regsend,
                           width=15, text='Register', font=('Helvetica', 11), cursor='hand2', bg='#252221',
                           fg='lightgray', activebackground='lightgray',
                           activeforeground='#252221')
@@ -194,9 +179,11 @@ class Client:
         self.reg.mainloop()
 
     def regsend(self):
+        self.client.send('CRED'.encode())
         self.client.send(
             pickle.dumps([self.name.get(), self.email.get(), self.country.get(), self.var.get(), self.pwd.get()]))
         self.__attempt = self.pwd
+        self.reg.destroy()
 
     def login(self):
         log = Tk()
@@ -233,9 +220,15 @@ class Client:
         Label(self.roomroot, text="Add a Room", bg='#CCCCCC', font=f).grid(row=0, column=0, sticky=W, pady=10)
         right_frame = Frame(self.roomroot, bd=2, bg='#CCCCCC', padx=10, pady=10)
         Label(right_frame, text="Room name", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
-        Label(right_frame, text="Location", bg='#CCCCCC', font=f).grid(row=5, column=0, sticky=W, pady=10)
+        Label(right_frame, text="Location", bg='#CCCCCC', font=f).grid(row=2, column=0, sticky=W, pady=10)
+        Label(right_frame, text="Price", bg='#CCCCCC', font=f).grid(row=3, column=0, sticky=W, pady=10)
+        Label(right_frame, text="Duration (hours)", bg='#CCCCCC', font=f).grid(row=4, column=0, sticky=W, pady=10)
+
         self.roomname = Entry(right_frame, font=f)
-        self.cordentry = Entry(right_frame, font=f)
+        self.location = Entry(right_frame, font=f)
+        self.price = Entry(right_frame, font=f)
+        self.duration = Entry(right_frame, font=f)
+
         add = Button(right_frame,
                      command=self.addsend,
                      width=15, text='Add', font=('Helvetica', 11), cursor='hand2', bg='#252221', fg='lightgray',
@@ -246,27 +239,42 @@ class Client:
                        activeforeground='#252221')
         self.err = Label(self.roomroot, bg='#CCCCCC', font=f)
         self.roomname.grid(row=1, column=1, pady=10, padx=20)
-        self.cordentry.grid(row=5, column=1, pady=10, padx=20)
+        self.location.grid(row=2, column=1, pady=10, padx=20)
+        self.price.grid(row=3, column=1, pady=10, padx=20)
+        self.duration.grid(row=4, column=1, pady=10, padx=20)
         close.grid(row=7, column=1, pady=10, padx=10)
         add.grid(row=7, column=0, pady=10, padx=10)
         right_frame.grid()
         self.err.grid(sticky=W, pady=10)
-        self.midwin(self.roomroot, 500, 275)
+        self.midwin(self.roomroot, 500, 350)
         self.roomroot.mainloop()
 
     def addsend(self):
+        err = False
         if self.__user[0] != 'Guest':
             temp = TkinterMapView()
-            try:
-                temp.set_address(self.cordentry.get())
-                c = temp.get_position()
-            except:
-                c = None
-            if c is not None:
-                self.client.send(f'ADD {self.roomname.get()}, {c[0]} {c[1]}'.encode())
-                with open('cords.txt', 'a') as txt:
-                    txt.write(f'{self.roomname.get()}, {c[0]} {c[1]}\n')
+            temp.set_address(self.location.get())
+            c = temp.get_position()
+            if c != (52.516268, 13.377694999999989):
+                if self.roomname.get() != '' and self.price.get().isdigit() and self.duration.get().isdigit():
+                    self.client.send(
+                        f'ADD {self.roomname.get()}, {c[0]} {c[1]}, {self.price.get()}, {self.duration.get()}, {self.__user[0]}'.encode())
+                else:
+                    self.err.config(text='values must be valid')
+                    err = True
+                if not err:
+                    conn = sqlite3.connect('create.db')
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        'INSERT INTO Offered (RoomName, By, Coordination,'
+                        ' Price, LendTime) VALUES (?,?,?,?,?)',
+                        (self.roomname.get(), self.__user[0], f'{c[0]} {c[1]}', self.price.get(), self.duration.get()))
+                    conn.commit()
+                    conn.close()
                     self.roomroot.destroy()
+            else:
+                self.err.config(text='Invalid place')
+
         else:
             self.err.config(text='Guests cannot add rooms')
 

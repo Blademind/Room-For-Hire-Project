@@ -30,7 +30,7 @@ class Server:
                             ' Country TEXT, LastOrder TEXT, Password TEXT);')
         self.cursor2 = self.conn2.cursor()
         self.cursor2.execute('CREATE TABLE IF NOT EXISTS Offered(RoomName TEXT,By TEXT, Coordination TEXT,'
-                             ' Price FLOAT, LendTime FLOAT);')
+                             ' Price FLOAT, LendTime TEXT);')
         self.conn.close()
         self.conn2.close()
         print('___SUCCESS___')

@@ -107,11 +107,11 @@ class Client:
         self.map.pack(expand=True)
         conn = sqlite3.connect('create.db')
         cursor = conn.cursor().execute('SELECT * FROM Offered')
-        all = cursor.fetchall()
+        self.all = cursor.fetchall()
         conn.close()
-        for row in all:
+        for row in self.all:
             self.cord = row[2].split(' ')
-            self.map.set_marker(float(self.cord[0]), float(self.cord[1]), text=row[0], command=self.askroom)
+            self.map.set_marker(float(self.cord[0]), float(self.cord[1]), text=row[0], command=lambda *args: self.askroom(row))
 
         self.message = Entry(self.root2, bg='lightgray', fg='#252221',
                              font=("Helvetica", 15, 'bold'), width=60)  # user entry, sent to server
@@ -127,9 +127,35 @@ class Client:
         self.midwin(self.root2, 800, 600)
         self.root2.mainloop()
 
-    # WIP 1
-    def askroom(self, *args):
-        pass
+    def askroom(self, row):
+        self.root3 = Tk()
+        self.root3.config(bg='#252221')
+        f = ('Helvetica', 14)
+        right_frame = Frame(self.root3, bd=2, bg='#CCCCCC', padx=10, pady=10)
+        Label(right_frame, text="Price", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
+        Label(right_frame, text="When", bg='#CCCCCC', font=f).grid(row=2, column=0, sticky=W, pady=10)
+        Label(right_frame, text="Where", bg='#CCCCCC', font=f).grid(row=3, column=0, sticky=W, pady=10)
+        Label(right_frame, text="Recipient", bg='#CCCCCC', font=f).grid(row=4, column=0, sticky=W, pady=10)
+
+        price = Label(right_frame, text=f'{row[3]}', font=f, bg='#CCCCCC')
+        when = Label(right_frame, text=f'{row[4]}', font=f, bg='#CCCCCC')
+        where = Label(right_frame, text=f'{row[2]}', font=f, bg='#CCCCCC')
+        recipient = Label(right_frame, text=f'{row[1]}', font=f, bg='#CCCCCC')
+        proceed = Button(right_frame,
+                       width=15, text='Proceed', font=('Helvetica', 11), cursor='hand2', bg='#252221', fg='lightgray',
+                       activebackground='lightgray',
+                       activeforeground='#252221')
+        close = Button(right_frame, command=self.root3.destroy, text='Close', width=15, font=('Helvetica', 11), cursor='hand2',
+                       bg='#252221', fg='lightgray', activebackground='lightgray',
+                       activeforeground='#252221')
+        price.grid(row=1, column=1, pady=10, padx=20)
+        when.grid(row=2, column=1, pady=10, padx=20)
+        where.grid(row=3, column=1, pady=10, padx=20)
+        recipient.grid(row=4, column=1, pady=10, padx=20)
+        close.grid(row=7, column=1, pady=10, padx=10)
+        proceed.grid(row=7, column=0, pady=10, padx=10)
+        right_frame.pack()
+        self.midwin(self.root3, 600, 250)
 
     def register(self):
         self.reg = Tk()
@@ -222,13 +248,12 @@ class Client:
         Label(right_frame, text="Room name", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
         Label(right_frame, text="Location", bg='#CCCCCC', font=f).grid(row=2, column=0, sticky=W, pady=10)
         Label(right_frame, text="Price", bg='#CCCCCC', font=f).grid(row=3, column=0, sticky=W, pady=10)
-        Label(right_frame, text="Duration (hours)", bg='#CCCCCC', font=f).grid(row=4, column=0, sticky=W, pady=10)
+        Label(right_frame, text="Dates (from - to)", bg='#CCCCCC', font=f).grid(row=4, column=0, sticky=W, pady=10)
 
         self.roomname = Entry(right_frame, font=f)
         self.location = Entry(right_frame, font=f)
         self.price = Entry(right_frame, font=f)
         self.duration = Entry(right_frame, font=f)
-
         add = Button(right_frame,
                      command=self.addsend,
                      width=15, text='Add', font=('Helvetica', 11), cursor='hand2', bg='#252221', fg='lightgray',
@@ -256,7 +281,7 @@ class Client:
             temp.set_address(self.location.get())
             c = temp.get_position()
             if c != (52.516268, 13.377694999999989):
-                if self.roomname.get() != '' and self.price.get().isdigit() and self.duration.get().isdigit():
+                if self.roomname.get() != '' and self.price.get().isdigit() and self.duration.get() != '':
                     self.client.send(
                         f'ADD {self.roomname.get()}, {c[0]} {c[1]}, {self.price.get()}, {self.duration.get()}, {self.__user[0]}'.encode())
                 else:

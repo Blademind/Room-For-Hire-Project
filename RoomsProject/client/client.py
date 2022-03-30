@@ -1,4 +1,5 @@
 import pickle
+import shutil
 import threading
 import time
 import tkinter.messagebox
@@ -11,10 +12,11 @@ from tkinter import filedialog
 from PIL import Image, ImageTk
 import os
 
-
 """
 Client by Alon Levy
 """
+
+file = __file__
 
 
 class Client:
@@ -23,7 +25,8 @@ class Client:
         self.BUF = 4096
         self.ADDR = ('127.0.0.1', 50000)  # where to connect
         self.client.connect(self.ADDR)
-        self.getfile()
+        self.images = pickle.loads(self.client.recv(self.BUF))
+        self.getimage()
         _thread.start_new_thread(self.listen, ())
         self.__user = ['Guest', None]
         print('___SUCCESS___')
@@ -34,11 +37,24 @@ class Client:
         img = pickle.loads(data)
         with open('create.db', 'wb') as txt:
             s = 0
-            while s < img:
+            while s != img:
                 data2 = self.client.recv(self.BUF)
                 if not data2: break
                 txt.write(data2)
                 s += len(data2)
+
+    def getimage(self):
+        for name in self.images:
+            data = self.client.recv(self.BUF)
+            img = pickle.loads(data)
+            with open(f'Images/{name}', 'wb') as txt:
+                s = 0
+                while s != img:
+                    data2 = self.client.recv(self.BUF)
+                    if not data2: break
+                    txt.write(data2)
+                    s += len(data2)
+        self.getfile()
 
     def listen(self):
         while 1:
@@ -116,8 +132,9 @@ class Client:
         conn.close()
         for row in self.all:
             self.cord = row[2].split(' ')
-            if row[5] != 1:
-                self.map.set_marker(float(self.cord[0]), float(self.cord[1]), text=row[0], command=lambda here=row: self.askroomtk(here))
+            if row[6] != 1:
+                img = ImageTk.PhotoImage(Image.open(f'Images/{row[5]}').resize((300, 200)))
+                self.map.set_marker(float(self.cord[0]), float(self.cord[1]), image=img, text=row[0], command=lambda here=row: self.askroomtk(here))
 
         self.message = Entry(self.root2, bg='lightgray', fg='#252221',
                              font=("Helvetica", 15, 'bold'), width=60)  # user entry, sent to server
@@ -304,7 +321,7 @@ class Client:
         add.grid(row=7, column=0, pady=10, padx=10)
         right_frame.grid()
         self.err.grid(sticky=W, pady=10)
-        self.midwin(self.roomroot, 500, 350)
+        self.midwin(self.roomroot, 500, 400)
         self.roomroot.mainloop()
 
     def addfile(self):
@@ -313,10 +330,12 @@ class Client:
     def addsend(self):
         err = False
         if self.__user[0] != 'Guest':
+
+            shutil.copy(self.filename, f'Images/{self.filename[self.filename.rfind("/")+1:]}')
             temp = TkinterMapView()
             temp.set_address(self.location.get())
             c = temp.get_position()
-            if c != (52.516268, 13.377694999999989):
+            if c != (52.516268, 13.377694999999989):  # non-generic only
                 if self.roomname.get() != '' and self.price.get().isdigit() and self.duration.get() != '':
                     self.client.send(
                         f'ADD {self.roomname.get()}, {c[0]} {c[1]}, {self.price.get()}, {self.duration.get()},'
@@ -330,8 +349,8 @@ class Client:
                     cursor = conn.cursor()
                     cursor.execute(
                         'INSERT INTO Offered (RoomName, By, Coordinates,'
-                        ' Price, LendTime, Bought, Buyer) VALUES (?,?,?,?,?,0,"None")',
-                        (self.roomname.get(), self.__user[0], f'{c[0]} {c[1]}', self.price.get(), self.duration.get()))
+                        ' Price, LendTime, ImagePath, Bought, Buyer) VALUES (?,?,?,?,?,?,0,"None")',
+                        (self.roomname.get(), self.__user[0], f'{c[0]} {c[1]}', self.price.get(), self.duration.get(), self.filename[self.filename.rfind("/")+1:]))
                     conn.commit()
                     conn.close()
                     self.roomroot.destroy()
@@ -379,11 +398,10 @@ class Client:
             send = pickle.dumps(length)
             s = 0
             self.client.send(send)
-            while s < length:
+            while s != length:
                 data = txt.read(self.BUF)
                 self.client.send(data)
                 s += len(data)
-
 
 if __name__ == '__main__':
     print('___INITIALIZING___')

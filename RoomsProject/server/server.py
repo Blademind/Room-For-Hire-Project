@@ -1,6 +1,7 @@
 import _thread
 import pickle
 import socket
+import time
 from socket import *
 import select
 import threading
@@ -33,7 +34,7 @@ class Server:
                             ' Country TEXT, LastOrder TEXT, Password TEXT);')
         self.cursor2 = self.conn2.cursor()
         self.cursor2.execute('CREATE TABLE IF NOT EXISTS Offered(RoomName TEXT,By TEXT, Coordinates TEXT,'
-                             ' Price INT, LendTime TEXT, ImagePath TEXT Bought BIT, Buyer TEXT);')
+                             ' Price INT, LendTime TEXT, ImagePath TEXT, Bought BIT, Buyer TEXT);')
         self.conn.close()
         self.conn2.close()
         print('___SUCCESS___')
@@ -52,9 +53,9 @@ class Server:
     def getfile(self, sock, name):
         data = sock.recv(self.BUF)
         img = pickle.loads(data)
-        with open(f'{os.path.dirname(file)}/Images/{name}', 'wb') as txt:
+        with open(f'Images/{name}', 'wb') as txt:
             s = 0
-            while s < img:
+            while s != img:
                 data2 = sock.recv(self.BUF)
                 if not data2: break
                 txt.write(data2)
@@ -67,9 +68,11 @@ class Server:
                 if sock == self.server:
                     client, addr = self.server.accept()
                     print(f'{addr} Connected')
+                    self.lst = os.listdir('Images/')
+                    client.send(pickle.dumps(os.listdir('Images/')))
                     self.readables.append(client)
                     self.writeables.append(client)
-                    _thread.start_new_thread(self.sendcords, (client,))
+                    _thread.start_new_thread(self.sendimages, (client,))
                 else:
                     try:
                         data = sock.recv(self.BUF)
@@ -90,7 +93,7 @@ class Server:
                         cursor = self.conn2.cursor()
                         cursor.execute(
                             'INSERT INTO Offered (RoomName, By, Coordinates,'
-                            ' Price, LendTime, ImagePath Bought, Buyer) VALUES (?,?,?,?,?,?,0,"None")',
+                            ' Price, LendTime, ImagePath, Bought, Buyer) VALUES (?,?,?,?,?,?,0,"None")',
                             (values[0], values[4], values[1], values[2], values[3], values[5]))
                         self.conn2.commit()
                         self.conn2.close()
@@ -153,6 +156,20 @@ class Server:
 
     def getrooms(self):
         print(self.rooms)
+
+    def sendimages(self, sock):
+        for name in self.lst:
+            with open(f'Images/{name}', 'rb') as txt:
+                length = os.path.getsize(f'Images/{name}')
+                send = pickle.dumps(length)
+                s = 0
+                sock.send(send)
+                while s != length:
+                    data = txt.read(self.BUF)
+                    sock.send(data)
+                    s += len(data)
+            time.sleep(0.01)
+        self.sendcords(sock)
 
 
 if __name__ == '__main__':

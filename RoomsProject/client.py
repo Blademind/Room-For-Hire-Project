@@ -1,4 +1,5 @@
 import pickle
+import threading
 import time
 import tkinter.messagebox
 from socket import *
@@ -6,6 +7,8 @@ from tkinter import *
 import _thread
 import sqlite3
 from tkintermapview import TkinterMapView
+from tkinter import filedialog
+from PIL import Image, ImageTk
 
 """
 Client by Alon Levy
@@ -111,7 +114,8 @@ class Client:
         conn.close()
         for row in self.all:
             self.cord = row[2].split(' ')
-            self.map.set_marker(float(self.cord[0]), float(self.cord[1]), text=row[0], command=lambda *args: self.askroom(row))
+            if row[5] != 1:
+                self.map.set_marker(float(self.cord[0]), float(self.cord[1]), text=row[0], command=lambda here=row: self.askroomtk(here))
 
         self.message = Entry(self.root2, bg='lightgray', fg='#252221',
                              font=("Helvetica", 15, 'bold'), width=60)  # user entry, sent to server
@@ -127,7 +131,13 @@ class Client:
         self.midwin(self.root2, 800, 600)
         self.root2.mainloop()
 
-    def askroom(self, row):
+    def askroomtk(self, row):
+        for i in self.all:
+            if i[2].split(' ')[0] == str(row.position[0]) and i[2].split(' ')[1] == str(row.position[1]):
+                self.row = i
+                break
+        self.client.send('OCC'.encode())
+        self.client.send(pickle.dumps(self.row))
         self.root3 = Tk()
         self.root3.config(bg='#252221')
         f = ('Helvetica', 14)
@@ -136,13 +146,17 @@ class Client:
         Label(right_frame, text="When", bg='#CCCCCC', font=f).grid(row=2, column=0, sticky=W, pady=10)
         Label(right_frame, text="Where", bg='#CCCCCC', font=f).grid(row=3, column=0, sticky=W, pady=10)
         Label(right_frame, text="Recipient", bg='#CCCCCC', font=f).grid(row=4, column=0, sticky=W, pady=10)
-
-        price = Label(right_frame, text=f'{row[3]}', font=f, bg='#CCCCCC')
-        when = Label(right_frame, text=f'{row[4]}', font=f, bg='#CCCCCC')
-        where = Label(right_frame, text=f'{row[2]}', font=f, bg='#CCCCCC')
-        recipient = Label(right_frame, text=f'{row[1]}', font=f, bg='#CCCCCC')
+        cord = self.row[2].split(' ')
+        price = Label(right_frame, text=f'{self.row[3]}', font=f, bg='#CCCCCC')
+        when = Label(right_frame, text=f'{self.row[4]}', font=f, bg='#CCCCCC')
+        self.where = Label(right_frame, text=f'{format(float(cord[0]),".2f"), format(float(cord[1]),".2f")}', font=f, bg='#CCCCCC')
+        self.recipient = Label(right_frame, text=f'{self.row[1]}', font=f, bg='#CCCCCC')
+        self.timer = Label(right_frame, font=('Helvetica', 12),
+                           bg='#252221', fg='lightgray', activebackground='lightgray',
+                           activeforeground='#252221')
+        self.timer.grid(column=8, row=0, sticky=E)
         proceed = Button(right_frame,
-                       width=15, text='Proceed', font=('Helvetica', 11), cursor='hand2', bg='#252221', fg='lightgray',
+                       width=15, text='Proceed', command=self.askroom, font=('Helvetica', 11), cursor='hand2', bg='#252221', fg='lightgray',
                        activebackground='lightgray',
                        activeforeground='#252221')
         close = Button(right_frame, command=self.root3.destroy, text='Close', width=15, font=('Helvetica', 11), cursor='hand2',
@@ -150,12 +164,24 @@ class Client:
                        activeforeground='#252221')
         price.grid(row=1, column=1, pady=10, padx=20)
         when.grid(row=2, column=1, pady=10, padx=20)
-        where.grid(row=3, column=1, pady=10, padx=20)
-        recipient.grid(row=4, column=1, pady=10, padx=20)
+        self.where.grid(row=3, column=1, pady=10, padx=20)
+        self.recipient.grid(row=4, column=1, pady=10, padx=20)
         close.grid(row=7, column=1, pady=10, padx=10)
         proceed.grid(row=7, column=0, pady=10, padx=10)
-        right_frame.pack()
-        self.midwin(self.root3, 600, 250)
+        right_frame.grid()
+        self.update_clock(60)
+        self.midwin(self.root3, 500, 300)
+
+    def askroom(self):
+        self.client.send('BUY'.encode())
+        self.client.send(pickle.dumps(self.row))
+        conn = sqlite3.connect('create.db')
+        conn.cursor().execute(f'UPDATE Offered SET Bought=?, Buyer=? WHERE Coordinates=?', (1, self.row[1], self.row[2]))
+        conn.commit()
+        conn.close()
+        self.root3.destroy()
+        self.root2.destroy()
+        self.worldrooms()
 
     def register(self):
         self.reg = Tk()
@@ -165,19 +191,12 @@ class Client:
         self.right_frame = Frame(self.reg, bd=2, bg='#CCCCCC', padx=10, pady=10)
         Label(self.right_frame, text="Name", bg='#CCCCCC', font=f).grid(row=0, column=0, sticky=W, pady=10)
         Label(self.right_frame, text="Email", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
-        Label(self.right_frame, text="Gender", bg='#CCCCCC', font=f).grid(row=3, column=0, sticky=W, pady=10)
         Label(self.right_frame, text="Country", bg='#CCCCCC', font=f).grid(row=2, column=0, sticky=W, pady=10)
         Label(self.right_frame, text="Password", bg='#CCCCCC', font=f).grid(row=5, column=0, sticky=W, pady=10)
         Label(self.right_frame, text="Re-Enter Password", bg='#CCCCCC', font=f).grid(row=6, column=0, sticky=W, pady=10)
-
-        self.gender = LabelFrame(self.right_frame, bg='#CCCCCC', padx=10, pady=10, )
         self.name = Entry(self.right_frame, font=f)
         self.email = Entry(self.right_frame, font=f)
         self.country = Entry(self.right_frame, font=f)
-        self.male = Radiobutton(self.gender, text='Male', bg='#CCCCCC', variable=self.var, value='male',
-                                font=('Times', 10), )
-        self.female = Radiobutton(self.gender, text='Female', bg='#CCCCCC', variable=self.var, value='female',
-                                  font=('Times', 10))
         self.pwd = Entry(self.right_frame, font=f, show='*')
         self.pwd_again = Entry(self.right_frame, font=f, show='*')
 
@@ -198,11 +217,21 @@ class Client:
         register.grid(row=7, column=0, pady=10, padx=10)
         self.right_frame.pack()
 
-        self.gender.grid(row=3, column=1, pady=10, padx=20)
-        self.male.pack(expand=True, side=LEFT)
-        self.female.pack(expand=True, side=LEFT)
-        self.midwin(self.reg, 500, 400)
+        self.midwin(self.reg, 500, 350)
+
         self.reg.mainloop()
+
+    def update_clock(self, c):
+        flag = True
+        if c >= 0:
+            try:
+                self.timer.config(text=c)
+            except: flag = False
+        else:
+            self.root3.destroy()
+            flag = False
+        if flag:
+            self.root.after(1000, lambda: self.update_clock(c-1))
 
     def regsend(self):
         self.client.send('CRED'.encode())
@@ -249,6 +278,7 @@ class Client:
         Label(right_frame, text="Location", bg='#CCCCCC', font=f).grid(row=2, column=0, sticky=W, pady=10)
         Label(right_frame, text="Price", bg='#CCCCCC', font=f).grid(row=3, column=0, sticky=W, pady=10)
         Label(right_frame, text="Dates (from - to)", bg='#CCCCCC', font=f).grid(row=4, column=0, sticky=W, pady=10)
+        Button(right_frame, text="Image", command=self.addfile, bg='#CCCCCC', font=f).grid(row=5, column=0, sticky=W, pady=10)
 
         self.roomname = Entry(right_frame, font=f)
         self.location = Entry(right_frame, font=f)
@@ -274,6 +304,10 @@ class Client:
         self.midwin(self.roomroot, 500, 350)
         self.roomroot.mainloop()
 
+    def addfile(self):
+        filename = filedialog.askopenfilename()
+        print(filename)
+
     def addsend(self):
         err = False
         if self.__user[0] != 'Guest':
@@ -291,8 +325,8 @@ class Client:
                     conn = sqlite3.connect('create.db')
                     cursor = conn.cursor()
                     cursor.execute(
-                        'INSERT INTO Offered (RoomName, By, Coordination,'
-                        ' Price, LendTime) VALUES (?,?,?,?,?)',
+                        'INSERT INTO Offered (RoomName, By, Coordinates,'
+                        ' Price, LendTime, Bought, Buyer) VALUES (?,?,?,?,?,0,"None")',
                         (self.roomname.get(), self.__user[0], f'{c[0]} {c[1]}', self.price.get(), self.duration.get()))
                     conn.commit()
                     conn.close()
@@ -339,3 +373,4 @@ class Client:
 if __name__ == '__main__':
     print('___INITIALIZING___')
     c = Client()
+

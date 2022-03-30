@@ -22,6 +22,7 @@ class Server:
         self.BUF = 1024
         self.PORT = 50000
         self.rooms = []
+        self.occ = []
         threading.Thread(target=self.listen).start()
         self.conn = sqlite3.connect('users.db')
         self.conn2 = sqlite3.connect('create.db')
@@ -29,8 +30,8 @@ class Server:
         self.cursor.execute('CREATE TABLE IF NOT EXISTS Registered(Fullname TEXT, Email TEXT, Gender TEXT,'
                             ' Country TEXT, LastOrder TEXT, Password TEXT);')
         self.cursor2 = self.conn2.cursor()
-        self.cursor2.execute('CREATE TABLE IF NOT EXISTS Offered(RoomName TEXT,By TEXT, Coordination TEXT,'
-                             ' Price FLOAT, LendTime TEXT);')
+        self.cursor2.execute('CREATE TABLE IF NOT EXISTS Offered(RoomName TEXT,By TEXT, Coordinates TEXT,'
+                             ' Price INT, LendTime TEXT, Bought BIT, Buyer TEXT);')
         self.conn.close()
         self.conn2.close()
         print('___SUCCESS___')
@@ -71,8 +72,8 @@ class Server:
                         self.conn2 = sqlite3.connect('create.db')
                         cursor = self.conn2.cursor()
                         cursor.execute(
-                            'INSERT INTO Offered (RoomName, By, Coordination,'
-                            ' Price, LendTime) VALUES (?,?,?,?,?)',
+                            'INSERT INTO Offered (RoomName, By, Coordinates,'
+                            ' Price, LendTime, Bought, Buyer) VALUES (?,?,?,?,?,0,"None")',
                             (values[0], values[4], values[1], values[2], values[3]))
                         self.conn2.commit()
                         self.conn2.close()
@@ -89,6 +90,18 @@ class Server:
                             sock.send(f'Success {data[0][1]}'.encode())
                         except:
                             sock.send('Error'.encode())
+                    elif datacontent == 'BUY':
+                        data = sock.recv(self.BUF)
+                        data = pickle.loads(data)
+                        self.conn2 = sqlite3.connect('create.db')
+                        cursor = self.conn2.cursor()
+                        cursor.execute(f'UPDATE Offered SET Bought=?, Buyer=? WHERE Coordinates=?', (1, data[1], data[2]))
+                        self.conn2.commit()
+                        self.conn2.close()
+                    elif datacontent == 'OCC':
+                        data = sock.recv(self.BUF)
+                        data = pickle.loads(data)
+                        self.occ.append(data)
 
     def loginuser(self, cred):
         self.conn = sqlite3.connect('users.db')

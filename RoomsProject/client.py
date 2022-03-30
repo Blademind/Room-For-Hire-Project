@@ -9,6 +9,8 @@ import sqlite3
 from tkintermapview import TkinterMapView
 from tkinter import filedialog
 from PIL import Image, ImageTk
+import os
+
 
 """
 Client by Alon Levy
@@ -18,7 +20,7 @@ Client by Alon Levy
 class Client:
     def __init__(self):
         self.client = socket(AF_INET, SOCK_STREAM)
-        self.BUF = 1024
+        self.BUF = 4096
         self.ADDR = ('127.0.0.1', 50000)  # where to connect
         self.client.connect(self.ADDR)
         self.getfile()
@@ -278,7 +280,8 @@ class Client:
         Label(right_frame, text="Location", bg='#CCCCCC', font=f).grid(row=2, column=0, sticky=W, pady=10)
         Label(right_frame, text="Price", bg='#CCCCCC', font=f).grid(row=3, column=0, sticky=W, pady=10)
         Label(right_frame, text="Dates (from - to)", bg='#CCCCCC', font=f).grid(row=4, column=0, sticky=W, pady=10)
-        Button(right_frame, text="Image", command=self.addfile, bg='#CCCCCC', font=f).grid(row=5, column=0, sticky=W, pady=10)
+        Button(right_frame, text="Add image", command=self.addfile, font=f, bg='#252221', fg='lightgray',cursor='hand2',
+               activebackground='lightgray',  activeforeground='#252221').grid(row=5, column=0, sticky=W, pady=10)
 
         self.roomname = Entry(right_frame, font=f)
         self.location = Entry(right_frame, font=f)
@@ -305,8 +308,7 @@ class Client:
         self.roomroot.mainloop()
 
     def addfile(self):
-        filename = filedialog.askopenfilename()
-        print(filename)
+        self.filename = filedialog.askopenfilename(filetypes=[('image files', '.png'), ('image files', '.jpg')],)
 
     def addsend(self):
         err = False
@@ -317,7 +319,9 @@ class Client:
             if c != (52.516268, 13.377694999999989):
                 if self.roomname.get() != '' and self.price.get().isdigit() and self.duration.get() != '':
                     self.client.send(
-                        f'ADD {self.roomname.get()}, {c[0]} {c[1]}, {self.price.get()}, {self.duration.get()}, {self.__user[0]}'.encode())
+                        f'ADD {self.roomname.get()}, {c[0]} {c[1]}, {self.price.get()}, {self.duration.get()},'
+                        f' {self.__user[0]}, {self.filename[self.filename.rfind("/")+1:]}'.encode())
+                    self.sendimage()
                 else:
                     self.err.config(text='values must be valid')
                     err = True
@@ -368,6 +372,17 @@ class Client:
         a = int(root.winfo_screenwidth() / 2 - (x / 2))
         b = int(root.winfo_screenheight() / 2 - (y / 2))
         root.geometry('{}x{}+{}+{}'.format(x, y, a, b))
+
+    def sendimage(self):
+        with open(self.filename, 'rb') as txt:
+            length = os.path.getsize(self.filename)
+            send = pickle.dumps(length)
+            s = 0
+            self.client.send(send)
+            while s < length:
+                data = txt.read(self.BUF)
+                self.client.send(data)
+                s += len(data)
 
 
 if __name__ == '__main__':

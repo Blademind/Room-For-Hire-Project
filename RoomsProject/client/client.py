@@ -1,7 +1,7 @@
+import datetime
 import pickle
+import re
 import shutil
-import threading
-import time
 import tkinter.messagebox
 from socket import *
 from tkinter import *
@@ -11,9 +11,12 @@ from tkintermapview import TkinterMapView
 from tkinter import filedialog
 from PIL import Image, ImageTk
 import os
+from tkcalendar import DateEntry
 
 """
 Client by Alon Levy
+This aims to allow user interaction of which
+he can personalize and buy rooms.
 """
 
 file = __file__
@@ -27,6 +30,7 @@ class Client:
         self.client.connect(self.ADDR)
         self.images = pickle.loads(self.client.recv(self.BUF))
         self.getimage()
+        self.recorders = []
         _thread.start_new_thread(self.listen, ())
         self.__user = ['Guest', None]
         print('___SUCCESS___')
@@ -61,12 +65,98 @@ class Client:
             data = self.client.recv(self.BUF)
             if not data:
                 break
-            tkinter.messagebox.showinfo('Message from Server', data.decode())
-            if 'Success' in data.decode():
-                self.log1.config(text='Logout', command=self.logout)
-                self.__user[0] = data.decode()[8:]
-                self.__user[1] = self.__attempt
-                self.user1.config(text=f'Welcome,\n{self.__user[0]}')
+            try:
+                datacontent = data.decode()
+                print(datacontent)
+                if datacontent == 'FILES':
+                    self.getimage()
+                if 'Success' in datacontent:
+                    self.log1.config(text='Logout', command=self.logout)
+                    self.recent = Button(self.root,
+                                         command=self.orders, text='Recent orders', font=('Helvetica', 11),
+                                         cursor='hand2',
+                                         bg='#252221', fg='lightgray', activebackground='lightgray',
+                                         activeforeground='#252221')
+                    self.recent.grid(column=2, row=0, sticky=W)
+                    self.reg1.grid_forget()
+                    self.__user[0] = data.decode()[8:]
+                    self.__user[1] = self.__attempt
+                    self.user1.config(text=f'Welcome,\n{self.__user[0]}')
+                if datacontent == 'DESTROY':
+                    self.root3.destroy()
+            except:
+                self.recorders = pickle.loads(data)
+
+    def orders(self):
+        if len(self.recorders) != 0:
+            self.root5 = Tk()
+            orders1 = Listbox(self.root5, font=('Helvetica', 12), bg='#CCCCCC')
+            for row in self.recorders:
+                orders1.insert(END, row[0])
+            orders1.grid()
+
+            close = Button(self.root5,
+                           command=self.root5.destroy, text='Close', width=15, font=('Helvetica', 11),
+                           cursor='hand2',
+                           bg='#252221', fg='lightgray', activebackground='lightgray',
+                           activeforeground='#252221')
+            close.grid()
+            orders1.bind('<Double-1>', lambda event: self.details(self.recorders[orders1.curselection()[0]]))
+        else:
+            print('You have not placed any order')
+
+    def details(self, line):
+        self.root4 = Tk()
+        self.root4.config(bg='#252221')
+        f = ('Helvetica', 14)
+        right_frame = Frame(self.root4, bd=2, bg='#CCCCCC', padx=10, pady=10)
+        Label(right_frame, text="Price", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
+        Label(right_frame, text="From", bg='#CCCCCC', font=f).grid(row=2, column=0, sticky=W, pady=10)
+        Label(right_frame, text="Until", bg='#CCCCCC', font=f).grid(row=3, column=0, sticky=W, pady=10)
+        Label(right_frame, text="Where", bg='#CCCCCC', font=f).grid(row=4, column=0, sticky=W, pady=10)
+        Label(right_frame, text="Recipient", bg='#CCCCCC', font=f).grid(row=5, column=0, sticky=W, pady=10)
+        cord = line[2].split(' ')
+        price = Label(right_frame, text=f'{line[3]}', font=f, bg='#CCCCCC')
+        when = Label(right_frame, text=f'{line[4]}', font=f, bg='#CCCCCC')
+        until = Label(right_frame, text=f'{line[5]}', font=f, bg='#CCCCCC')
+
+        self.where = Label(right_frame, text=f'{format(float(cord[0]), ".2f"), format(float(cord[1]), ".2f")}', font=f,
+                           bg='#CCCCCC')
+        self.recipient = Label(right_frame, text=f'{line[1]}', font=f, bg='#CCCCCC')
+        close = Button(right_frame,
+                       command=self.root4.destroy,
+                       text='Close', width=15, font=('Helvetica', 11),
+                       cursor='hand2',
+                       bg='#252221', fg='lightgray', activebackground='lightgray',
+                       activeforeground='#252221')
+
+        price.grid(row=1, column=1, pady=10, padx=20)
+        when.grid(row=2, column=1, pady=10, padx=20)
+        until.grid(row=3, column=1, pady=10, padx=20)
+        self.where.grid(row=4, column=1, pady=10, padx=20)
+        self.recipient.grid(row=5, column=1, pady=10, padx=20)
+        close.grid(row=6, column=1, pady=10, padx=20)
+        t = line[4].split('/')
+        t = datetime.datetime(int(t[2]), int(t[1]), int(t[0]))
+        if t > datetime.datetime.today():
+            cancel = Button(right_frame,
+                            command=lambda: [self.cancel(line), self.root4.destroy(),self.root5.destroy(), self.orders()],
+                            text='Cancel', width=15, font=('Helvetica', 11), cursor='hand2',
+                            bg='#252221', fg='lightgray', activebackground='lightgray',
+                            activeforeground='#252221')
+            cancel.grid(row=6, column=0, pady=10, padx=20)
+
+        right_frame.grid()
+        self.root4.mainloop()
+
+    def cancel(self, line):
+        self.conn = sqlite3.connect('create.db')
+        self.conn.cursor().execute(f'UPDATE Offered SET Bought=0 WHERE RoomName={line[0]}')
+        self.conn.commit()
+        self.conn.close()
+        self.recorders.remove(line)
+        self.client.send('UPDATE'.encode())
+        self.client.send(pickle.dumps(line))
 
     def main(self):
         self.root = Tk()
@@ -74,10 +164,9 @@ class Client:
         self.root.grid_columnconfigure(2, weight=1)
         self.root.grid_rowconfigure(1, weight=1)
         self.root.grid_rowconfigure(2, weight=1)
-        reg1 = Button(self.root, command=self.register, text='Register', font=('Helvetica', 11), cursor='hand2',
-                      bg='#252221', fg='lightgray', activebackground='lightgray',
-                      activeforeground='#252221')
-        reg1.grid(column=0, row=0)
+        self.reg1 = Button(self.root, command=self.register, text='Register', font=('Helvetica', 11), cursor='hand2',
+                           bg='#252221', fg='lightgray', activebackground='lightgray', activeforeground='#252221')
+        self.reg1.grid(column=0, row=0)
         self.log1 = Button(self.root, command=self.login, text='Login', font=('Helvetica', 11), cursor='hand2',
                            bg='#252221', fg='lightgray', activebackground='lightgray',
                            activeforeground='#252221')
@@ -132,9 +221,10 @@ class Client:
         conn.close()
         for row in self.all:
             self.cord = row[2].split(' ')
-            if row[6] != 1:
-                img = ImageTk.PhotoImage(Image.open(f'Images/{row[5]}').resize((300, 200)))
-                self.map.set_marker(float(self.cord[0]), float(self.cord[1]), image=img, text=row[0], command=lambda here=row: self.askroomtk(here))
+            if row[7] != 1:
+                img = ImageTk.PhotoImage(Image.open(f'Images/{row[6]}').resize((300, 200)))
+                self.map.set_marker(float(self.cord[0]), float(self.cord[1]), image=img, marker_color_circle="black",
+                                    marker_color_outside="gray40", text=row[0], command=lambda here=row: self.askroomtk(here))
 
         self.message = Entry(self.root2, bg='lightgray', fg='#252221',
                              font=("Helvetica", 15, 'bold'), width=60)  # user entry, sent to server
@@ -151,62 +241,117 @@ class Client:
         self.root2.mainloop()
 
     def askroomtk(self, row):
+        print(row)
         for i in self.all:
             if i[2].split(' ')[0] == str(row.position[0]) and i[2].split(' ')[1] == str(row.position[1]):
                 self.row = i
                 break
-        self.client.send('OCC'.encode())
-        self.client.send(pickle.dumps(self.row))
         self.root3 = Tk()
         self.root3.config(bg='#252221')
+        self.client.send('OCC'.encode())
+        self.client.send(pickle.dumps(self.row))
         f = ('Helvetica', 14)
         right_frame = Frame(self.root3, bd=2, bg='#CCCCCC', padx=10, pady=10)
         Label(right_frame, text="Price", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
-        Label(right_frame, text="When", bg='#CCCCCC', font=f).grid(row=2, column=0, sticky=W, pady=10)
-        Label(right_frame, text="Where", bg='#CCCCCC', font=f).grid(row=3, column=0, sticky=W, pady=10)
-        Label(right_frame, text="Recipient", bg='#CCCCCC', font=f).grid(row=4, column=0, sticky=W, pady=10)
+        Label(right_frame, text="From", bg='#CCCCCC', font=f).grid(row=2, column=0, sticky=W, pady=10)
+        Label(right_frame, text="Until", bg='#CCCCCC', font=f).grid(row=3, column=0, sticky=W, pady=10)
+        Label(right_frame, text="Check-in", bg='#CCCCCC', font=f).grid(row=4, column=0, sticky=W, pady=10)
+        Label(right_frame, text="Check-out", bg='#CCCCCC', font=f).grid(row=5, column=0, sticky=W, pady=10)
         cord = self.row[2].split(' ')
         price = Label(right_frame, text=f'{self.row[3]}', font=f, bg='#CCCCCC')
         when = Label(right_frame, text=f'{self.row[4]}', font=f, bg='#CCCCCC')
-        self.where = Label(right_frame, text=f'{format(float(cord[0]),".2f"), format(float(cord[1]),".2f")}', font=f, bg='#CCCCCC')
+        until = Label(right_frame, text=f'{self.row[5]}', font=f, bg='#CCCCCC')
+
+        self.where = Label(right_frame, text=f'{format(float(cord[0]), ".2f"), format(float(cord[1]), ".2f")}', font=f,
+                           bg='#CCCCCC')
         self.recipient = Label(right_frame, text=f'{self.row[1]}', font=f, bg='#CCCCCC')
         self.timer = Label(right_frame, font=('Helvetica', 12),
                            bg='#252221', fg='lightgray', activebackground='lightgray',
                            activeforeground='#252221')
         self.timer.grid(column=8, row=0, sticky=E)
+        self.duration1 = DateEntry(right_frame, font=f, locale='en_IL', date_pattern='dd/mm/yyyy',
+                                   mindate=datetime.datetime.now())
+        self.duration2 = DateEntry(right_frame, font=f, locale='en_IL', date_pattern='dd/mm/yyyy',
+                                   mindate=datetime.datetime.now())
         proceed = Button(right_frame,
-                       width=15, text='Proceed', command=self.askroom, font=('Helvetica', 11), cursor='hand2', bg='#252221', fg='lightgray',
-                       activebackground='lightgray',
-                       activeforeground='#252221')
-        close = Button(right_frame, command=self.root3.destroy, text='Close', width=15, font=('Helvetica', 11), cursor='hand2',
-                       bg='#252221', fg='lightgray', activebackground='lightgray',
+                         width=15, text='Proceed', command=self.askroom, font=('Helvetica', 11), cursor='hand2',
+                         bg='#252221', fg='lightgray',
+                         activebackground='lightgray',
+                         activeforeground='#252221')
+        close = Button(right_frame,
+                       command=lambda: [self.removeinst(self.row),
+                                        self.root3.destroy()], text='Close', width=15, font=('Helvetica', 11),
+                       cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
                        activeforeground='#252221')
         price.grid(row=1, column=1, pady=10, padx=20)
         when.grid(row=2, column=1, pady=10, padx=20)
-        self.where.grid(row=3, column=1, pady=10, padx=20)
-        self.recipient.grid(row=4, column=1, pady=10, padx=20)
+        until.grid(row=3, column=1, pady=10, padx=20)
+        self.where.grid(row=4, column=1, pady=10, padx=20)
+        self.recipient.grid(row=5, column=1, pady=10, padx=20)
+        self.duration1.grid(row=4, column=1, pady=10)
+        self.duration2.grid(row=5, column=1, pady=10)
         close.grid(row=7, column=1, pady=10, padx=10)
         proceed.grid(row=7, column=0, pady=10, padx=10)
         right_frame.grid()
         self.update_clock(60)
-        self.midwin(self.root3, 500, 300)
+        self.root3.mainloop()
+
+    def removeinst(self, row):
+        self.client.send('REM'.encode())
+        self.client.send(pickle.dumps(row))
 
     def askroom(self):
-        self.client.send('BUY'.encode())
-        self.client.send(pickle.dumps(self.row))
-        conn = sqlite3.connect('create.db')
-        conn.cursor().execute(f'UPDATE Offered SET Bought=?, Buyer=? WHERE Coordinates=?', (1, self.row[1], self.row[2]))
-        conn.commit()
-        conn.close()
-        self.root3.destroy()
-        self.root2.destroy()
-        self.worldrooms()
+        if self.__user[0] == 'Guest':
+            self.guestmail()
+        elif self.duration1.get_date() < self.duration2.get_date():
+             conn = sqlite3.connect('create.db')
+             conn.cursor().execute(f'UPDATE Offered SET Bought=?, Buyer=?, First=?, Last=? WHERE Coordinates=?',
+                                   (1, self.__user[0], self.row[2], self.duration1.get_date().strftime('%d/%m/%Y'), self.duration2.get_date().strftime('%d/%m/%Y')))
+             conn.commit()
+             conn.close()
+             self.row = list(self.row)
+             self.recorders.append(self.row)
+             self.row[4], self.row[5] = self.duration1.get_date().strftime('%d/%m/%Y'), self.duration2.get_date().strftime('%d/%m/%Y')
+             self.client.send('BUY'.encode())
+             self.row.append(self.__user[0])
+             self.client.send(pickle.dumps(self.row))
+             self.removeinst(self.row)
+             self.row = None
+             self.root3.destroy()
+             self.root2.destroy()
+             self.worldrooms()
+
+    def guestmail(self):
+        self.root6 = Tk()
+        self.root6.config(bg='#252221')
+        f = ('Helvetica', 14)
+        self.right_frame2 = Frame(self.root6, bd=2, bg='#CCCCCC', padx=10, pady=10)
+        Label(self.right_frame2, text="Email", bg='#CCCCCC', font=f).grid(row=0, column=0, sticky=W, pady=10)
+        self.name = Entry(self.right_frame2, font=f)
+        submit = Button(self.right_frame2,
+                          command=lambda: self.submitguestname(self.name.get()),
+                          width=15, text='Submit', font=('Helvetica', 11), cursor='hand2', bg='#252221',
+                          fg='lightgray', activebackground='lightgray',
+                          activeforeground='#252221')
+        close = Button(self.right_frame2, command=self.root6.destroy, text='Close', width=15, font=('Helvetica', 11),
+                       cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
+                       activeforeground='#252221')
+        self.name.grid(row=0, column=1, pady=10, padx=20)
+        close.grid(row=1, column=1, pady=10, padx=10)
+        submit.grid(row=1, column=0, pady=10, padx=10)
+        self.right_frame2.pack()
+        self.midwin(self.root6, 500, 250)
+
+    def submitguestname(self, mail):
+        self.__user[0] = mail
+        self.root6.destroy()
+        self.askroom()
 
     def register(self):
         self.reg = Tk()
+        self.var = StringVar()
         self.reg.config(bg='#252221')
         f = ('Helvetica', 14)
-        self.var = StringVar()
         self.right_frame = Frame(self.reg, bd=2, bg='#CCCCCC', padx=10, pady=10)
         Label(self.right_frame, text="Name", bg='#CCCCCC', font=f).grid(row=0, column=0, sticky=W, pady=10)
         Label(self.right_frame, text="Email", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
@@ -245,12 +390,13 @@ class Client:
         if c >= 0:
             try:
                 self.timer.config(text=c)
-            except: flag = False
+            except:
+                flag = False
         else:
             self.root3.destroy()
             flag = False
         if flag:
-            self.root.after(1000, lambda: self.update_clock(c-1))
+            self.root.after(1000, lambda: self.update_clock(c - 1))
 
     def regsend(self):
         self.client.send('CRED'.encode())
@@ -295,15 +441,21 @@ class Client:
         right_frame = Frame(self.roomroot, bd=2, bg='#CCCCCC', padx=10, pady=10)
         Label(right_frame, text="Room name", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
         Label(right_frame, text="Location", bg='#CCCCCC', font=f).grid(row=2, column=0, sticky=W, pady=10)
-        Label(right_frame, text="Price", bg='#CCCCCC', font=f).grid(row=3, column=0, sticky=W, pady=10)
-        Label(right_frame, text="Dates (from - to)", bg='#CCCCCC', font=f).grid(row=4, column=0, sticky=W, pady=10)
-        Button(right_frame, text="Add image", command=self.addfile, font=f, bg='#252221', fg='lightgray',cursor='hand2',
-               activebackground='lightgray',  activeforeground='#252221').grid(row=5, column=0, sticky=W, pady=10)
+        Label(right_frame, text="Price (per night)", bg='#CCCCCC', font=f).grid(row=3, column=0, sticky=W, pady=10)
+        Label(right_frame, text="Check-in", bg='#CCCCCC', font=f).grid(row=4, column=0, sticky=W, pady=10)
+        Label(right_frame, text="Check-out", bg='#CCCCCC', font=f).grid(row=5, column=0, sticky=W, pady=10)
+
+        Button(right_frame, text="Choose image", command=self.addfile, font=f, bg='#252221', fg='lightgray',
+               cursor='hand2',
+               activebackground='lightgray', activeforeground='#252221').grid(row=6, column=0, sticky=W, pady=10)
 
         self.roomname = Entry(right_frame, font=f)
         self.location = Entry(right_frame, font=f)
         self.price = Entry(right_frame, font=f)
-        self.duration = Entry(right_frame, font=f)
+        self.duration1 = DateEntry(right_frame, font=f, locale='en_IL', date_pattern='dd/mm/yyyy',
+                                   mindate=datetime.datetime.now())
+        self.duration2 = DateEntry(right_frame, font=f, locale='en_IL', date_pattern='dd/mm/yyyy',
+                                   mindate=datetime.datetime.now())
         add = Button(right_frame,
                      command=self.addsend,
                      width=15, text='Add', font=('Helvetica', 11), cursor='hand2', bg='#252221', fg='lightgray',
@@ -312,53 +464,66 @@ class Client:
         close = Button(right_frame, command=self.roomroot.destroy, text='Close', width=15, font=('Helvetica', 11),
                        cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
                        activeforeground='#252221')
-        self.err = Label(self.roomroot, bg='#CCCCCC', font=f)
+        self.message = Label(self.roomroot, bg='#252221', font=f)
         self.roomname.grid(row=1, column=1, pady=10, padx=20)
         self.location.grid(row=2, column=1, pady=10, padx=20)
         self.price.grid(row=3, column=1, pady=10, padx=20)
-        self.duration.grid(row=4, column=1, pady=10, padx=20)
+        self.duration1.grid(row=4, column=1, pady=10)
+        self.duration2.grid(row=5, column=1, pady=10)
         close.grid(row=7, column=1, pady=10, padx=10)
         add.grid(row=7, column=0, pady=10, padx=10)
         right_frame.grid()
-        self.err.grid(sticky=W, pady=10)
-        self.midwin(self.roomroot, 500, 400)
+        self.message.grid(sticky=W, pady=10)
+        self.midwin(self.roomroot, 500, 480)
         self.roomroot.mainloop()
 
     def addfile(self):
-        self.filename = filedialog.askopenfilename(filetypes=[('image files', '.png'), ('image files', '.jpg')],)
+        self.roomroot.attributes('-topmost', False)
+        self.filename = filedialog.askopenfilename(filetypes=[('image files', '.png'), ('image files', '.jpg')], )
+        self.message.config(text=f'image: {self.filename}', bg='#CCCCCC')
+        self.roomroot.attributes('-topmost', True)
 
     def addsend(self):
         err = False
         if self.__user[0] != 'Guest':
-
-            shutil.copy(self.filename, f'Images/{self.filename[self.filename.rfind("/")+1:]}')
+            regex = re.compile('[0-9]{2}/[0-9]{2}/[0-9]{4}')
+            self.duration = (self.duration2.get_date().strftime('%d/%m/%Y'), self.duration1.get_date().strftime(
+                '%d/%m/%Y')) if self.duration1.get_date() > self.duration2.get_date() else (
+            self.duration1.get_date().strftime('%d/%m/%Y'), self.duration2.get_date().strftime('%d/%m/%Y'))
+            shutil.copy(self.filename, f'Images/{self.filename[self.filename.rfind("/") + 1:]}')
             temp = TkinterMapView()
             temp.set_address(self.location.get())
             c = temp.get_position()
             if c != (52.516268, 13.377694999999989):  # non-generic only
-                if self.roomname.get() != '' and self.price.get().isdigit() and self.duration.get() != '':
+                if self.roomname.get() != '' and self.price.get().isdigit():
                     self.client.send(
-                        f'ADD {self.roomname.get()}, {c[0]} {c[1]}, {self.price.get()}, {self.duration.get()},'
-                        f' {self.__user[0]}, {self.filename[self.filename.rfind("/")+1:]}'.encode())
+                        f'ADD {self.roomname.get()}, {c[0]} {c[1]},'
+                        f' {int(self.price.get()) * (int(abs((self.duration1.get_date() - self.duration2.get_date())).days) + 1)},'
+                        f' {self.duration[0]}, {self.duration[1]}'
+                        f', {self.__user[0]}, {self.filename[self.filename.rfind("/") + 1:]}'.encode())
                     self.sendimage()
                 else:
-                    self.err.config(text='values must be valid')
+                    self.message.config(text='values must be valid', bg='#CCCCCC')
                     err = True
                 if not err:
                     conn = sqlite3.connect('create.db')
                     cursor = conn.cursor()
                     cursor.execute(
                         'INSERT INTO Offered (RoomName, By, Coordinates,'
-                        ' Price, LendTime, ImagePath, Bought, Buyer) VALUES (?,?,?,?,?,?,0,"None")',
-                        (self.roomname.get(), self.__user[0], f'{c[0]} {c[1]}', self.price.get(), self.duration.get(), self.filename[self.filename.rfind("/")+1:]))
+                        ' Price, First, Last, ImagePath, Bought, Buyer) VALUES (?,?,?,?,?,?,?,0,"None")',
+                        (self.roomname.get(), self.__user[0], f'{c[0]} {c[1]}',
+                         int(self.price.get()) * (
+                                     int(abs((self.duration1.get_date() - self.duration2.get_date())).days) + 1),
+                         self.duration[0],
+                         self.duration[1], self.filename[self.filename.rfind("/") + 1:]))
                     conn.commit()
                     conn.close()
                     self.roomroot.destroy()
             else:
-                self.err.config(text='Invalid place')
+                self.message.config(text='Invalid place', bg='#CCCCCC')
 
         else:
-            self.err.config(text='Guests cannot add rooms')
+            self.message.config(text='Guests cannot add rooms', bg='#CCCCCC')
 
     def loginsend(self, email, pwd, log):
         self.client.send('CRED'.encode())
@@ -368,6 +533,7 @@ class Client:
 
     def logout(self):
         self.__user = ['Guest', None]
+        self.recorders = []
         self.root.destroy()
         self.main()
 
@@ -403,7 +569,10 @@ class Client:
                 self.client.send(data)
                 s += len(data)
 
+
 if __name__ == '__main__':
     print('___INITIALIZING___')
-    c = Client()
-
+    try:
+        c = Client()
+    except ConnectionRefusedError:
+        print('COULD NOT CONNECT')

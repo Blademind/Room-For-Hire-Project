@@ -22,7 +22,7 @@ class Server:
         self.server.listen(5)
         self.readables = [self.server]
         self.writeables = [self.server]
-        self.BUF = 4096
+        self.BUF = 8192
         self.PORT = 50000
         self.rooms = []
         self.occ = []
@@ -42,25 +42,26 @@ class Server:
 
     def sendcords(self, sock):
         with open('Databases/create.db', 'rb') as txt:
-            len = os.path.getsize('Databases/create.db')
-            send = pickle.dumps(len)
+            length = os.path.getsize('Databases/create.db')
+            send = pickle.dumps(length)
             sock.send(send)
-            while 1:
+            s = 0
+            while s != length:
                 data = txt.read(self.BUF)
-                if not data:
-                    break
+                s += len(data)
                 sock.send(data)
 
     def getfile(self, sock, name):
+        sock.settimeout(1)
         data = sock.recv(self.BUF)
         img = pickle.loads(data)
+        s = 0
         with open(f'Images/{name}', 'wb') as txt:
-            s = 0
             while s != img:
                 data2 = sock.recv(self.BUF)
-                if not data2: break
                 txt.write(data2)
                 s += len(data2)
+                sock.send('GOOD'.encode())
 
     def timer(self, row):
         time.sleep(60)
@@ -77,7 +78,7 @@ class Server:
                     client.send(pickle.dumps(self.lst))
                     self.readables.append(client)
                     self.writeables.append(client)
-                    _thread.start_new_thread(self.sendimages, (client,))
+                    self.sendimages(client,)
                 else:
                     try:
                         data = sock.recv(self.BUF)
@@ -94,7 +95,7 @@ class Server:
                         datacontent = ""
                     if 'ADD' in datacontent:
                         values = datacontent[4:].split(', ')
-                        _thread.start_new_thread(self.getfile, (sock, values[6]))
+                        self.getfile(sock, values[6])
                         self.conn2 = sqlite3.connect('Databases/create.db')
                         cursor = self.conn2.cursor()
                         cursor.execute(
@@ -103,7 +104,7 @@ class Server:
                             (values[0], values[5], values[1], values[2], values[3], values[4], values[6]))
                         self.conn2.commit()
                         self.conn2.close()
-                        _thread.start_new_thread(self.broadcast_files, ())
+                        _thread.start_new_thread(self.broadcast_files, (sock,))
                     elif datacontent == 'CRED':
                         data = sock.recv(self.BUF)
                         try:
@@ -147,13 +148,16 @@ class Server:
                         self.conn.commit()
                         self.conn.close()
 
-    def broadcast_files(self):
+    def broadcast_files(self, ignore):
+        print(self.lst)
         for sock in self.writeables:
-            if sock != self.server:
+            if sock != self.server and sock != ignore:
                 sock.send('FILES'.encode())
+                sock.send(pickle.dumps(os.listdir('Images/')))
                 for name in self.lst:
                     with open(f'Images/{name}', 'rb') as txt:
                         length = os.path.getsize(f'Images/{name}')
+                        print(length)
                         send = pickle.dumps(length)
                         s = 0
                         sock.send(send)
@@ -161,8 +165,8 @@ class Server:
                             data = txt.read(self.BUF)
                             sock.send(data)
                             s += len(data)
-                    time.sleep(0.01)
                     self.sendcords(sock)
+                    time.sleep(0.01)
 
     def loginuser(self, cred):
         self.conn = sqlite3.connect('Databases/users.db')
@@ -211,9 +215,15 @@ class Server:
                 sock.send(send)
                 while s != length:
                     data = txt.read(self.BUF)
-                    sock.send(data)
                     s += len(data)
-            time.sleep(0.01)
+                    print(s, len(data))
+                    sock.send(data)
+                    try:
+                        sock.settimeout(0.005)
+                        msg = sock.recv(self.BUF)
+                        print(msg)
+                    except:
+                        pass
         self.sendcords(sock)
 
 

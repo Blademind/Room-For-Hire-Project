@@ -25,12 +25,13 @@ file = __file__
 class Client:
     def __init__(self):
         self.client = socket(AF_INET, SOCK_STREAM)
-        self.BUF = 4096
+        self.BUF = 8192
         self.ADDR = ('127.0.0.1', 50000)  # where to connect
         self.client.connect(self.ADDR)
         self.images = pickle.loads(self.client.recv(self.BUF))
         self.getimage()
         self.recorders = []
+        self.server = self.client.getpeername()
         _thread.start_new_thread(self.listen, ())
         self.__user = ['Guest', None]
         print('___SUCCESS___')
@@ -51,13 +52,13 @@ class Client:
         for name in self.images:
             data = self.client.recv(self.BUF)
             img = pickle.loads(data)
+            s=0
             with open(f'Images/{name}', 'wb') as txt:
-                s = 0
                 while s != img:
                     data2 = self.client.recv(self.BUF)
-                    if not data2: break
                     txt.write(data2)
                     s += len(data2)
+                    self.client.send('GOOD'.encode())
         self.getfile()
 
     def listen(self):
@@ -69,6 +70,7 @@ class Client:
                 datacontent = data.decode()
                 print(datacontent)
                 if datacontent == 'FILES':
+                    self.images = pickle.loads(self.client.recv(self.BUF))
                     self.getimage()
                 if 'Success' in datacontent:
                     self.log1.config(text='Logout', command=self.logout)
@@ -241,7 +243,6 @@ class Client:
         self.root2.mainloop()
 
     def askroomtk(self, row):
-        print(row)
         for i in self.all:
             if i[2].split(' ')[0] == str(row.position[0]) and i[2].split(' ')[1] == str(row.position[1]):
                 self.row = i
@@ -562,12 +563,19 @@ class Client:
         with open(self.filename, 'rb') as txt:
             length = os.path.getsize(self.filename)
             send = pickle.dumps(length)
-            s = 0
             self.client.send(send)
+            s = 0
             while s != length:
                 data = txt.read(self.BUF)
-                self.client.send(data)
                 s += len(data)
+                print(s, len(data))
+                self.client.send(data)
+                try:
+                    self.client.settimeout(0.005)
+                    msg = self.client.recv(self.BUF)
+                    print(msg)
+                except:
+                    pass
 
 
 if __name__ == '__main__':

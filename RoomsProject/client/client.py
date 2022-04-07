@@ -2,6 +2,7 @@ import datetime
 import pickle
 import re
 import shutil
+import time
 import tkinter.messagebox
 from socket import *
 from tkinter import *
@@ -26,7 +27,7 @@ class Client:
     def __init__(self):
         self.client = socket(AF_INET, SOCK_STREAM)
         self.BUF = 8192
-        self.ADDR = ('127.0.0.1', 50000)  # where to connect
+        self.ADDR = ('192.168.1.197', 50000)  # where to connect
         self.client.connect(self.ADDR)
         self.images = pickle.loads(self.client.recv(self.BUF))
         self.getimage()
@@ -40,19 +41,30 @@ class Client:
     def getfile(self):
         data = self.client.recv(self.BUF)
         img = pickle.loads(data)
-        with open('create.db', 'wb') as txt:
+        with open(f'Databases/create.db', 'wb') as txt:
             s = 0
             while s != img:
                 data2 = self.client.recv(self.BUF)
                 if not data2: break
                 txt.write(data2)
                 s += len(data2)
+                self.client.send('GOOD'.encode())
+        data = self.client.recv(self.BUF)
+        img = pickle.loads(data)
+        with open(f'Databases/subrooms.db', 'wb') as txt:
+            s = 0
+            while s != img:
+                data2 = self.client.recv(self.BUF)
+                if not data2: break
+                txt.write(data2)
+                s += len(data2)
+                self.client.send('GOOD'.encode())
 
     def getimage(self):
         for name in self.images:
             data = self.client.recv(self.BUF)
             img = pickle.loads(data)
-            s=0
+            s = 0
             with open(f'Images/{name}', 'wb') as txt:
                 while s != img:
                     data2 = self.client.recv(self.BUF)
@@ -63,6 +75,7 @@ class Client:
 
     def listen(self):
         while 1:
+            self.client.settimeout(None)
             data = self.client.recv(self.BUF)
             if not data:
                 break
@@ -72,7 +85,7 @@ class Client:
                 if datacontent == 'FILES':
                     self.images = pickle.loads(self.client.recv(self.BUF))
                     self.getimage()
-                if 'Success' in datacontent:
+                elif 'Success' in datacontent:
                     self.log1.config(text='Logout', command=self.logout)
                     self.recent = Button(self.root,
                                          command=self.orders, text='Recent orders', font=('Helvetica', 11),
@@ -84,10 +97,37 @@ class Client:
                     self.__user[0] = data.decode()[8:]
                     self.__user[1] = self.__attempt
                     self.user1.config(text=f'Welcome,\n{self.__user[0]}')
-                if datacontent == 'DESTROY':
+                elif datacontent == 'DESTROY':
                     self.root3.destroy()
+                elif datacontent == 'RATE':
+                    data = pickle.loads(self.client.recv(self.BUF))
+                    self.rating(data[0])
             except:
                 self.recorders = pickle.loads(data)
+
+    def rating(self, name):
+        rate = Tk()
+        var = IntVar()
+        rate.config(bg='lightgray')
+        lb3 = Label(rate, text=f'How did you like your stay at {name}?', font=("Helvetica", 15), bg='#252221', fg='lightgray')
+        lb3.pack(fill=BOTH)
+        scale = Scale(rate, from_=1, to=10, bg='#252221', orient=HORIZONTAL, fg='lightgray')
+        scale.pack(fill=BOTH,pady=10)
+        submit = Button(rate, text='Submit', command=lambda: [self.rate(scale), rate.destroy()], bg='#252221',
+                     fg='lightgray', activebackground='lightgray', activeforeground='#252221', padx=10,
+                        cursor='hand2')
+        submit.pack(pady=10, side=RIGHT)
+
+        no = Button(rate, text='No vote', command=lambda: [self.client.send(pickle.dumps(0)), rate.destroy()], bg='#252221', fg='lightgray', activebackground='lightgray',
+                    activeforeground='#252221', padx=10, cursor='hand2')  # Destroy popup window
+        no.pack(pady=10, side=RIGHT)
+        self.midwin(rate, 350, 150)
+        rate.mainloop()
+
+    def rate(self, scale):
+        time.sleep(0.1)
+        self.client.send(pickle.dumps(scale.get()))
+        print(f'SENT {scale.get()}')
 
     def orders(self):
         if len(self.recorders) != 0:
@@ -105,7 +145,7 @@ class Client:
             close.grid()
             orders1.bind('<Double-1>', lambda event: self.details(self.recorders[orders1.curselection()[0]]))
         else:
-            print('You have not placed any order')
+            tkinter.messagebox.showinfo(message='You have not placed any order')
 
     def details(self, line):
         self.root4 = Tk()
@@ -152,11 +192,13 @@ class Client:
         self.root4.mainloop()
 
     def cancel(self, line):
-        self.conn = sqlite3.connect('create.db')
-        self.conn.cursor().execute(f'UPDATE Offered SET Bought=0 WHERE RoomName={line[0]}')
+        self.conn = sqlite3.connect('Databases/subrooms.db')
+        self.conn.cursor().execute(f'DELETE FROM Bought WHERE RoomName=? AND Buyer=?;', (line[0], self.__user[0]))
         self.conn.commit()
         self.conn.close()
         self.recorders.remove(line)
+        line = list(line)
+        line.append(self.__user[0])
         self.client.send('UPDATE'.encode())
         self.client.send(pickle.dumps(line))
 
@@ -216,17 +258,21 @@ class Client:
         self.map = TkinterMapView(self.root2, width=800, height=550, corner_radius=0)
         self.map.set_address('Israel')
         self.map.set_zoom(7)
-        self.map.pack(expand=True)
-        conn = sqlite3.connect('create.db')
+        self.map.pack(fill=BOTH)
+        conn = sqlite3.connect('Databases/create.db')
         cursor = conn.cursor().execute('SELECT * FROM Offered')
         self.all = cursor.fetchall()
         conn.close()
         for row in self.all:
             self.cord = row[2].split(' ')
             if row[7] != 1:
+                mindate = row[4].split('/')
+                maxdate = row[5].split('/')
+                mindate = datetime.datetime(int(mindate[2]),int(mindate[1]), int(mindate[0]))
+                maxdate = datetime.datetime(int(maxdate[2]),int(maxdate[1]), int(maxdate[0]))
                 img = ImageTk.PhotoImage(Image.open(f'Images/{row[6]}').resize((300, 200)))
                 self.map.set_marker(float(self.cord[0]), float(self.cord[1]), image=img, marker_color_circle="black",
-                                    marker_color_outside="gray40", text=row[0], command=lambda here=row: self.askroomtk(here))
+                                    marker_color_outside="gray40", text=row[0], command=lambda here=row: self.askroomtk(here, mindate, maxdate))
 
         self.message = Entry(self.root2, bg='lightgray', fg='#252221',
                              font=("Helvetica", 15, 'bold'), width=60)  # user entry, sent to server
@@ -242,7 +288,7 @@ class Client:
         self.midwin(self.root2, 800, 600)
         self.root2.mainloop()
 
-    def askroomtk(self, row):
+    def askroomtk(self, row, mindate, maxdate):
         for i in self.all:
             if i[2].split(' ')[0] == str(row.position[0]) and i[2].split(' ')[1] == str(row.position[1]):
                 self.row = i
@@ -258,10 +304,15 @@ class Client:
         Label(right_frame, text="Until", bg='#CCCCCC', font=f).grid(row=3, column=0, sticky=W, pady=10)
         Label(right_frame, text="Check-in", bg='#CCCCCC', font=f).grid(row=4, column=0, sticky=W, pady=10)
         Label(right_frame, text="Check-out", bg='#CCCCCC', font=f).grid(row=5, column=0, sticky=W, pady=10)
+
         cord = self.row[2].split(' ')
         price = Label(right_frame, text=f'{self.row[3]}', font=f, bg='#CCCCCC')
         when = Label(right_frame, text=f'{self.row[4]}', font=f, bg='#CCCCCC')
         until = Label(right_frame, text=f'{self.row[5]}', font=f, bg='#CCCCCC')
+        if self.row[len(self.row) - 1] is not None:
+            Label(right_frame, text="Rating", bg='#CCCCCC', font=f).grid(row=6, column=0, sticky=W, pady=10)
+            rating = Label(right_frame, text=f'{self.row[len(self.row) - 1]} / 10', font=f, bg='#CCCCCC')
+            rating.grid(row=6, column=1, pady=10, padx=20)
 
         self.where = Label(right_frame, text=f'{format(float(cord[0]), ".2f"), format(float(cord[1]), ".2f")}', font=f,
                            bg='#CCCCCC')
@@ -271,9 +322,9 @@ class Client:
                            activeforeground='#252221')
         self.timer.grid(column=8, row=0, sticky=E)
         self.duration1 = DateEntry(right_frame, font=f, locale='en_IL', date_pattern='dd/mm/yyyy',
-                                   mindate=datetime.datetime.now())
+                                   mindate=mindate, maxdate=maxdate, showweeknumbers=0)
         self.duration2 = DateEntry(right_frame, font=f, locale='en_IL', date_pattern='dd/mm/yyyy',
-                                   mindate=datetime.datetime.now())
+                                   mindate=mindate, maxdate=maxdate, showweeknumbers=0)
         proceed = Button(right_frame,
                          width=15, text='Proceed', command=self.askroom, font=('Helvetica', 11), cursor='hand2',
                          bg='#252221', fg='lightgray',
@@ -304,23 +355,24 @@ class Client:
     def askroom(self):
         if self.__user[0] == 'Guest':
             self.guestmail()
-        elif self.duration1.get_date() < self.duration2.get_date():
-             conn = sqlite3.connect('create.db')
-             conn.cursor().execute(f'UPDATE Offered SET Bought=?, Buyer=?, First=?, Last=? WHERE Coordinates=?',
-                                   (1, self.__user[0], self.row[2], self.duration1.get_date().strftime('%d/%m/%Y'), self.duration2.get_date().strftime('%d/%m/%Y')))
-             conn.commit()
-             conn.close()
-             self.row = list(self.row)
-             self.recorders.append(self.row)
-             self.row[4], self.row[5] = self.duration1.get_date().strftime('%d/%m/%Y'), self.duration2.get_date().strftime('%d/%m/%Y')
-             self.client.send('BUY'.encode())
-             self.row.append(self.__user[0])
-             self.client.send(pickle.dumps(self.row))
-             self.removeinst(self.row)
-             self.row = None
-             self.root3.destroy()
-             self.root2.destroy()
-             self.worldrooms()
+        elif self.duration1.get_date() <= self.duration2.get_date():
+            conn = sqlite3.connect('Databases/subrooms.db')
+            conn.cursor().execute('INSERT INTO Bought(RoomName, Buyer, First, Last)  '
+                                  'VALUES(?,?,?,?)',
+                                  (self.row[0], self.__user[0], self.duration1.get_date().strftime('%d/%m/%Y'), self.duration2.get_date().strftime('%d/%m/%Y')))
+            conn.commit()
+            conn.close()
+            self.row = list(self.row)
+            self.recorders.append(self.row)
+            self.row[4], self.row[5] = self.duration1.get_date().strftime('%d/%m/%Y'), self.duration2.get_date().strftime('%d/%m/%Y')
+            self.client.send('BUY'.encode())
+            self.row.append(self.__user[0])
+            self.client.send(pickle.dumps(self.row))
+            self.removeinst(self.row)
+            self.row = None
+            self.root3.destroy()
+            self.root2.destroy()
+            self.worldrooms()
 
     def guestmail(self):
         self.root6 = Tk()
@@ -454,9 +506,9 @@ class Client:
         self.location = Entry(right_frame, font=f)
         self.price = Entry(right_frame, font=f)
         self.duration1 = DateEntry(right_frame, font=f, locale='en_IL', date_pattern='dd/mm/yyyy',
-                                   mindate=datetime.datetime.now())
+                                   mindate=datetime.datetime.now(), showweeknumbers=0)
         self.duration2 = DateEntry(right_frame, font=f, locale='en_IL', date_pattern='dd/mm/yyyy',
-                                   mindate=datetime.datetime.now())
+                                   mindate=datetime.datetime.now(), showweeknumbers=0)
         add = Button(right_frame,
                      command=self.addsend,
                      width=15, text='Add', font=('Helvetica', 11), cursor='hand2', bg='#252221', fg='lightgray',
@@ -486,11 +538,16 @@ class Client:
 
     def addsend(self):
         err = False
-        if self.__user[0] != 'Guest':
-            regex = re.compile('[0-9]{2}/[0-9]{2}/[0-9]{4}')
-            self.duration = (self.duration2.get_date().strftime('%d/%m/%Y'), self.duration1.get_date().strftime(
-                '%d/%m/%Y')) if self.duration1.get_date() > self.duration2.get_date() else (
-            self.duration1.get_date().strftime('%d/%m/%Y'), self.duration2.get_date().strftime('%d/%m/%Y'))
+        try:
+            self.filename
+        except:
+            self.filename = ''
+        if self.filename == '':
+            self.message.config(text='No image selected', bg='#CCCCCC')
+        elif self.duration1.get_date() > self.duration2.get_date():
+            self.message.config(text='Invalid date range', bg='#CCCCCC')
+        elif self.__user[0] != 'Guest':
+            self.duration = (self.duration1.get_date().strftime('%d/%m/%Y'), self.duration2.get_date().strftime('%d/%m/%Y'))
             shutil.copy(self.filename, f'Images/{self.filename[self.filename.rfind("/") + 1:]}')
             temp = TkinterMapView()
             temp.set_address(self.location.get())
@@ -507,11 +564,11 @@ class Client:
                     self.message.config(text='values must be valid', bg='#CCCCCC')
                     err = True
                 if not err:
-                    conn = sqlite3.connect('create.db')
+                    conn = sqlite3.connect('Databases/create.db')
                     cursor = conn.cursor()
                     cursor.execute(
                         'INSERT INTO Offered (RoomName, By, Coordinates,'
-                        ' Price, First, Last, ImagePath, Bought, Buyer) VALUES (?,?,?,?,?,?,?,0,"None")',
+                        ' Price, First, Last, ImagePath) VALUES (?,?,?,?,?,?,?)',
                         (self.roomname.get(), self.__user[0], f'{c[0]} {c[1]}',
                          int(self.price.get()) * (
                                      int(abs((self.duration1.get_date() - self.duration2.get_date())).days) + 1),
@@ -554,11 +611,13 @@ class Client:
         no.pack(pady=10, side=RIGHT)
         self.midwin(popup, 300, 80)  # place window in the center
 
+    # window placed middle
     def midwin(self, root, x, y):
         a = int(root.winfo_screenwidth() / 2 - (x / 2))
         b = int(root.winfo_screenheight() / 2 - (y / 2))
         root.geometry('{}x{}+{}+{}'.format(x, y, a, b))
 
+    # send an image
     def sendimage(self):
         with open(self.filename, 'rb') as txt:
             length = os.path.getsize(self.filename)
@@ -568,14 +627,8 @@ class Client:
             while s != length:
                 data = txt.read(self.BUF)
                 s += len(data)
-                print(s, len(data))
                 self.client.send(data)
-                try:
-                    self.client.settimeout(0.005)
-                    msg = self.client.recv(self.BUF)
-                    print(msg)
-                except:
-                    pass
+                time.sleep(0.005)
 
 
 if __name__ == '__main__':

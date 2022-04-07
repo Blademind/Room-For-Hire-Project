@@ -27,35 +27,31 @@ class Server:
         self.PORT = 50000
         self.rooms = []
         self.occ = []
-        self.conn = sqlite3.connect('Databases/users.db')
-        self.conn2 = sqlite3.connect('Databases/create.db')
-        self.conn3 = sqlite3.connect('Databases/subrooms.db')
+        self.conn = sqlite3.connect('Databases/database.db')
         self.conn.cursor().execute('CREATE TABLE IF NOT EXISTS Registered(Fullname TEXT, Email TEXT, Gender TEXT,'
                             ' Country TEXT, Password TEXT);')
-        self.conn2.cursor().execute('CREATE TABLE IF NOT EXISTS Offered(RoomName TEXT,By TEXT, Coordinates TEXT,'
+        self.conn.cursor().execute('CREATE TABLE IF NOT EXISTS Offered(RoomName TEXT,By TEXT, Coordinates TEXT,'
                              ' Price INT, First TEXT, Last TEXT, ImagePath TEXT, RATING INT);')
-        self.conn3.cursor().execute('CREATE TABLE IF NOT EXISTS Bought(RoomName TEXT, '
+        self.conn.cursor().execute('CREATE TABLE IF NOT EXISTS Bought(RoomName TEXT, '
                              'Buyer TEXT, First TEXT, Last TEXT, RATING INT);')
         self.conn.close()
-        self.conn2.close()
         self.lst = os.listdir('Images/')
         threading.Thread(target=self.listen).start()
         print('___SUCCESS___')
 
-    def sendfiles(self, sock):
-        filenames = ['Databases/create.db', 'Databases/subrooms.db']
-        for f in filenames:
-            with open(f, 'rb') as txt:
-                length = os.path.getsize(f)
-                send = pickle.dumps(length)
-                sock.send(send)
-                s = 0
-                while s != length:
+    def sendfile(self, sock):
+        filename = 'Databases/database.db'
+        with open(filename, 'rb') as txt:
+            length = os.path.getsize(filename)
+            send = pickle.dumps(length)
+            sock.send(send)
+            s = 0
+            while s != length:
                     data = txt.read(self.BUF)
                     s += len(data)
                     sock.send(data)
                     try:
-                        sock.settimeout(0.005)
+                        sock.settimeout(0.05)
                         sock.recv(self.BUF)
                     except: pass
 
@@ -89,12 +85,16 @@ class Server:
                 else:
                     try:
                         data = sock.recv(self.BUF)
-                    except:
+                    except ConnectionResetError:
                         print(f'{sock.getpeername()} Disconnected')
                         self.readables.remove(sock)
                         self.writeables.remove(sock)
                         break
+                    except:
+                        sock.settimeout(None)
+                        data = b"1"
                     if not data:
+                        print('123')
                         break
                     try:
                         datacontent = data.decode()
@@ -103,7 +103,7 @@ class Server:
                     if 'ADD' in datacontent:
                         values = datacontent[4:].split(', ')
                         self.getfile(sock, values[6])
-                        self.conn2 = sqlite3.connect('Databases/create.db')
+                        self.conn2 = sqlite3.connect('Databases/database.db')
                         cursor = self.conn2.cursor()
                         cursor.execute(
                             'INSERT INTO Offered (RoomName, By, Coordinates,'
@@ -130,7 +130,7 @@ class Server:
                     elif datacontent == 'BUY':
                         data = sock.recv(self.BUF)
                         data = pickle.loads(data)
-                        self.conn2 = sqlite3.connect('Databases/subrooms.db')
+                        self.conn2 = sqlite3.connect('Databases/database.db')
                         self.conn2.cursor().execute('INSERT INTO Bought(RoomName, Buyer, First, Last)  '
                                               'VALUES(?,?,?,?)',
                                        (data[0], data[len(data) - 1], data[4], data[5]))
@@ -152,12 +152,13 @@ class Server:
                     elif datacontent == 'UPDATE':
                         data = sock.recv(self.BUF)
                         data = pickle.loads(data)
-                        self.conn = sqlite3.connect('Databases/create.db')
+                        self.conn = sqlite3.connect('Databases/database.db')
                         self.conn.cursor().execute(f'DELETE FROM Bought WHERE RoomName=? AND Buyer=?;', (data[0], data[len(data) - 1]))
                         self.conn.commit()
                         self.conn.close()
 
     def broadcast_files(self, ignore):
+        self.lst = os.listdir('Images/')
         for sock in self.writeables:
             if sock != self.server and sock != ignore:
                 sock.send('FILES'.encode())
@@ -165,7 +166,6 @@ class Server:
                 for name in self.lst:
                     with open(f'Images/{name}', 'rb') as txt:
                         length = os.path.getsize(f'Images/{name}')
-                        print(length)
                         send = pickle.dumps(length)
                         s = 0
                         sock.send(send)
@@ -173,52 +173,51 @@ class Server:
                             data = txt.read(self.BUF)
                             sock.send(data)
                             s += len(data)
-                    self.sendfiles(sock)
-                    time.sleep(0.01)
+                            try:
+                                sock.settimeout(0.05)
+                                sock.recv(self.BUF)
+                            except:
+                                pass
+                sock.settimeout(None)
+                self.sendfiles(sock)
 
     def user_rate(self, rec, sock, specific_order):
         sock.settimeout(None)
         print(specific_order)
         for order in range(len(rec)):
-            date = rec[order][5].split('/')
-            dur = datetime.datetime(int(date[2]), int(date[1]), int(date[0]))
+            dur = datetime.datetime.strptime(rec[order][5], '%d/%m/%Y')
             if datetime.datetime.today() >= dur and specific_order[order][4] is None:
                 sock.send('RATE'.encode())
                 time.sleep(0.1)
                 sock.send(pickle.dumps(rec[order]))
                 rating = pickle.loads(sock.recv(self.BUF))
-                self.conn = sqlite3.connect('Databases/subrooms.db')
+                self.conn = sqlite3.connect('Databases/database.db')
                 self.conn.cursor().execute(f'UPDATE Bought SET RATING={rating} WHERE RoomName="{rec[order][0]}"')
                 self.conn.commit()
                 self.conn.close()
                 self.update_total_rating(rec[order][0])
 
     def update_total_rating(self, name):
-        self.conn = sqlite3.connect('Databases/subrooms.db')
+        self.conn = sqlite3.connect('Databases/database.db')
         all_rates = self.conn.cursor().execute('SELECT RATING FROM Bought WHERE RoomName=?', (name,)).fetchall()
-        self.conn.close()
         subtotal = 0
         for rate in all_rates:
             subtotal += rate[0]
-        self.conn = sqlite3.connect('Databases/create.db')
         self.conn.cursor().execute(f'UPDATE Offered SET RATING=? WHERE RoomName=?', (subtotal / len(all_rates), name))
         self.conn.commit()
         self.conn.close()
 
     def loginuser(self, cred):
-        self.conn = sqlite3.connect('Databases/users.db')
-        cursor2 = self.conn.cursor().execute('SELECT * FROM Registered WHERE Email=? AND Password=?',
+        self.conn = sqlite3.connect('Databases/database.db')
+        cursor = self.conn.cursor().execute('SELECT * FROM Registered WHERE Email=? AND Password=?',
                                              (cred[0], cred[1]))
         self.conn.commit()
-        data = cursor2.fetchone()
+        data = cursor.fetchone()
         if len(data) == 0:
             raise ValueError
+        cursor = self.conn.cursor().execute(f'SELECT * FROM Bought WHERE Buyer="{cred[0]}"')
+        all = cursor.fetchall()
         self.conn.close()
-        self.conn2 = sqlite3.connect('Databases/subrooms.db')
-        cursor2 = self.conn2.cursor().execute(f'SELECT * FROM Bought WHERE Buyer="{cred[0]}"')
-        all = cursor2.fetchall()
-        self.conn2.close()
-        self.conn2 = sqlite3.connect('Databases/create.db')
         ret = []
         for i in all:
             cursor2 = self.conn2.cursor().execute(f'SELECT * FROM Offered WHERE RoomName="{i[0]}"')
@@ -226,11 +225,10 @@ class Server:
             rec = list(rec)
             rec[4], rec[5] = i[2], i[3]
             ret.append(rec)
-        self.conn2.close()
         return data, ret, all
 
     def registeruser(self, cred):
-        self.conn = sqlite3.connect('Databases/users.db')
+        self.conn = sqlite3.connect('Databases/database.db')
         cursor = self.conn.cursor()
         cursor2 = self.conn.cursor().execute(f'SELECT * FROM Registered WHERE Email=?', (cred[2],))
         self.conn.commit()
@@ -269,7 +267,7 @@ class Server:
                     except:
                         pass
         sock.settimeout(None)
-        _thread.start_new_thread(self.sendfiles, (sock,))
+        _thread.start_new_thread(self.sendfile, (sock,))
 
 
 if __name__ == '__main__':

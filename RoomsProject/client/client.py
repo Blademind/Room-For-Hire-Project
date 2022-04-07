@@ -41,17 +41,7 @@ class Client:
     def getfile(self):
         data = self.client.recv(self.BUF)
         img = pickle.loads(data)
-        with open(f'Databases/create.db', 'wb') as txt:
-            s = 0
-            while s != img:
-                data2 = self.client.recv(self.BUF)
-                if not data2: break
-                txt.write(data2)
-                s += len(data2)
-                self.client.send('GOOD'.encode())
-        data = self.client.recv(self.BUF)
-        img = pickle.loads(data)
-        with open(f'Databases/subrooms.db', 'wb') as txt:
+        with open(f'Databases/database.db', 'wb') as txt:
             s = 0
             while s != img:
                 data2 = self.client.recv(self.BUF)
@@ -178,8 +168,7 @@ class Client:
         self.where.grid(row=4, column=1, pady=10, padx=20)
         self.recipient.grid(row=5, column=1, pady=10, padx=20)
         close.grid(row=6, column=1, pady=10, padx=20)
-        t = line[4].split('/')
-        t = datetime.datetime(int(t[2]), int(t[1]), int(t[0]))
+        t = datetime.datetime.strptime(line[4], '%d/%m/%Y')
         if t > datetime.datetime.today():
             cancel = Button(right_frame,
                             command=lambda: [self.cancel(line), self.root4.destroy(),self.root5.destroy(), self.orders()],
@@ -192,7 +181,7 @@ class Client:
         self.root4.mainloop()
 
     def cancel(self, line):
-        self.conn = sqlite3.connect('Databases/subrooms.db')
+        self.conn = sqlite3.connect('Databases/database.db')
         self.conn.cursor().execute(f'DELETE FROM Bought WHERE RoomName=? AND Buyer=?;', (line[0], self.__user[0]))
         self.conn.commit()
         self.conn.close()
@@ -259,7 +248,7 @@ class Client:
         self.map.set_address('Israel')
         self.map.set_zoom(7)
         self.map.pack(fill=BOTH)
-        conn = sqlite3.connect('Databases/create.db')
+        conn = sqlite3.connect('Databases/database.db')
         cursor = conn.cursor().execute('SELECT * FROM Offered')
         self.all = cursor.fetchall()
         conn.close()
@@ -293,7 +282,7 @@ class Client:
             if i[2].split(' ')[0] == str(row.position[0]) and i[2].split(' ')[1] == str(row.position[1]):
                 self.row = i
                 break
-        self.root3 = Tk()
+        self.root3 = Toplevel()
         self.root3.config(bg='#252221')
         self.client.send('OCC'.encode())
         self.client.send(pickle.dumps(self.row))
@@ -356,23 +345,46 @@ class Client:
         if self.__user[0] == 'Guest':
             self.guestmail()
         elif self.duration1.get_date() <= self.duration2.get_date():
-            conn = sqlite3.connect('Databases/subrooms.db')
-            conn.cursor().execute('INSERT INTO Bought(RoomName, Buyer, First, Last)  '
-                                  'VALUES(?,?,?,?)',
-                                  (self.row[0], self.__user[0], self.duration1.get_date().strftime('%d/%m/%Y'), self.duration2.get_date().strftime('%d/%m/%Y')))
-            conn.commit()
-            conn.close()
-            self.row = list(self.row)
-            self.recorders.append(self.row)
-            self.row[4], self.row[5] = self.duration1.get_date().strftime('%d/%m/%Y'), self.duration2.get_date().strftime('%d/%m/%Y')
-            self.client.send('BUY'.encode())
-            self.row.append(self.__user[0])
-            self.client.send(pickle.dumps(self.row))
+            conn = sqlite3.connect('Databases/database.db')
+            cursor = conn.cursor().execute('SELECT First, Last FROM Bought WHERE RoomName=?', (self.row[0],))
+            dates = cursor.fetchall()
+            final_dates1 = []
+            final_dates2 = []
+            flag = True
+            for date in dates:
+                start = datetime.datetime.strptime(date[0], '%d/%m/%Y')
+                finish = datetime.datetime.strptime(date[1], '%d/%m/%Y')
+                while start <= finish:
+                    final_dates1.append(start.date())
+                    start += datetime.timedelta(days=1)
+            start = self.duration1.get_date()
+            finish = self.duration2.get_date()
+            while start <= finish:
+                final_dates2.append(start)
+                start += datetime.timedelta(days=1)
+            for i in final_dates2:
+                if i in final_dates1:
+                    flag = False
+                    break
+            if flag:
+                conn.cursor().execute('INSERT INTO Bought(RoomName, Buyer, First, Last)  '
+                                      'VALUES(?,?,?,?)',
+                                      (self.row[0], self.__user[0], self.duration1.get_date().strftime('%d/%m/%Y'),
+                                       self.duration2.get_date().strftime('%d/%m/%Y')))
+                conn.commit()
+                conn.close()
+                self.row = list(self.row)
+                self.recorders.append(self.row)
+                self.row[4], self.row[5] = self.duration1.get_date().strftime(
+                    '%d/%m/%Y'), self.duration2.get_date().strftime('%d/%m/%Y')
+                self.row.append(self.__user[0])
+                self.client.send('BUY'.encode())
+                self.client.send(pickle.dumps(self.row))
+                self.root3.destroy()
+                self.row = None
+            else:
+                tkinter.messagebox.showinfo(message='The selected date is taken')
             self.removeinst(self.row)
-            self.row = None
-            self.root3.destroy()
-            self.root2.destroy()
-            self.worldrooms()
 
     def guestmail(self):
         self.root6 = Tk()
@@ -564,7 +576,7 @@ class Client:
                     self.message.config(text='values must be valid', bg='#CCCCCC')
                     err = True
                 if not err:
-                    conn = sqlite3.connect('Databases/create.db')
+                    conn = sqlite3.connect('Databases/database.db')
                     cursor = conn.cursor()
                     cursor.execute(
                         'INSERT INTO Offered (RoomName, By, Coordinates,'

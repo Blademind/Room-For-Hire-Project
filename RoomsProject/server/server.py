@@ -25,7 +25,7 @@ class Server:
         self.server.listen(5)
         self.readables = [self.server]
         self.writeables = [self.server]
-        self.BUF = 8192
+        self.BUF = 1024
         self.PORT = 50000
         self.rooms = []
         self.occ = []
@@ -54,7 +54,6 @@ class Server:
                     sock.send(data)
 
     def getfile(self, sock, name):
-        sock.settimeout(None)
         data = sock.recv(self.BUF)
         img = pickle.loads(data)
         s = 0
@@ -79,7 +78,7 @@ class Server:
                     client.send(pickle.dumps(self.lst))
                     self.readables.append(client)
                     self.writeables.append(client)
-                    self.sendimages(client,)
+                    _thread.start_new_thread(self.sendimages, (client,))
                 else:
                     try:
                         data = sock.recv(self.BUF)
@@ -89,7 +88,6 @@ class Server:
                         self.writeables.remove(sock)
                         break
                     if not data:
-                        print('123')
                         break
                     try:
                         datacontent = data.decode()
@@ -171,13 +169,10 @@ class Server:
                 self.sendfile(sock)
 
     def user_rate(self, rec, sock, specific_order):
-        sock.settimeout(None)
-        print(specific_order)
         for order in range(len(rec)):
             dur = datetime.datetime.strptime(rec[order][5], '%d/%m/%Y')
             if datetime.datetime.today() >= dur and specific_order[order][4] is None:
                 sock.send('RATE'.encode())
-                time.sleep(0.1)
                 sock.send(pickle.dumps(rec[order]))
                 rating = pickle.loads(sock.recv(self.BUF))
                 self.conn = sqlite3.connect('Databases/database.db')

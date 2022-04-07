@@ -27,7 +27,7 @@ file = __file__
 class Client:
     def __init__(self):
         self.client = socket(AF_INET, SOCK_STREAM)
-        self.BUF = 8192
+        self.BUF = 1024
         self.ADDR = ('192.168.1.197', 50000)  # where to connect
         self.client.connect(self.ADDR)
         self.client = ssl.wrap_socket(self.client, server_side=False, keyfile='privkey.pem', certfile='certificate.pem')
@@ -51,6 +51,7 @@ class Client:
                 if not data2: break
                 txt.write(data2)
                 s += len(data2)
+
     def getimage(self):
         for name in self.images:
             data = self.client.recv(self.BUF)
@@ -65,7 +66,6 @@ class Client:
 
     def listen(self):
         while 1:
-            self.client.settimeout(None)
             data = self.client.recv(self.BUF)
             if not data:
                 break
@@ -115,7 +115,6 @@ class Client:
         rate.mainloop()
 
     def rate(self, scale):
-        time.sleep(0.1)
         self.client.send(pickle.dumps(scale.get()))
         print(f'SENT {scale.get()}')
 

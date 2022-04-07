@@ -8,6 +8,7 @@ import select
 import threading
 import sqlite3
 import os
+import ssl
 
 """
 Server by Alon Levy
@@ -19,6 +20,7 @@ file = __file__
 class Server:
     def __init__(self):
         self.server = socket(AF_INET, SOCK_STREAM)
+        self.server = ssl.wrap_socket(self.server, server_side=True, keyfile='privkey.pem', certfile='certificate.pem')
         self.server.bind(('192.168.1.197', 50000))
         self.server.listen(5)
         self.readables = [self.server]
@@ -50,10 +52,6 @@ class Server:
                     data = txt.read(self.BUF)
                     s += len(data)
                     sock.send(data)
-                    try:
-                        sock.settimeout(0.05)
-                        sock.recv(self.BUF)
-                    except: pass
 
     def getfile(self, sock, name):
         sock.settimeout(None)
@@ -90,9 +88,6 @@ class Server:
                         self.readables.remove(sock)
                         self.writeables.remove(sock)
                         break
-                    except:
-                        sock.settimeout(None)
-                        data = b"1"
                     if not data:
                         print('123')
                         break
@@ -173,13 +168,7 @@ class Server:
                             data = txt.read(self.BUF)
                             sock.send(data)
                             s += len(data)
-                            try:
-                                sock.settimeout(0.05)
-                                sock.recv(self.BUF)
-                            except:
-                                pass
-                sock.settimeout(None)
-                self.sendfiles(sock)
+                self.sendfile(sock)
 
     def user_rate(self, rec, sock, specific_order):
         sock.settimeout(None)
@@ -261,12 +250,6 @@ class Server:
                     data = txt.read(self.BUF)
                     s += len(data)
                     sock.send(data)
-                    try:
-                        sock.settimeout(0.05)
-                        sock.recv(self.BUF)
-                    except:
-                        pass
-        sock.settimeout(None)
         _thread.start_new_thread(self.sendfile, (sock,))
 
 

@@ -13,6 +13,7 @@ from tkinter import filedialog
 from PIL import Image, ImageTk
 import os
 from tkcalendar import DateEntry
+import ssl
 
 """
 Client by Alon Levy
@@ -29,6 +30,8 @@ class Client:
         self.BUF = 8192
         self.ADDR = ('192.168.1.197', 50000)  # where to connect
         self.client.connect(self.ADDR)
+        self.client = ssl.wrap_socket(self.client, server_side=False, keyfile='privkey.pem', certfile='certificate.pem')
+
         self.images = pickle.loads(self.client.recv(self.BUF))
         self.getimage()
         self.recorders = []
@@ -48,8 +51,6 @@ class Client:
                 if not data2: break
                 txt.write(data2)
                 s += len(data2)
-                self.client.send('GOOD'.encode())
-
     def getimage(self):
         for name in self.images:
             data = self.client.recv(self.BUF)
@@ -60,7 +61,6 @@ class Client:
                     data2 = self.client.recv(self.BUF)
                     txt.write(data2)
                     s += len(data2)
-                    self.client.send('GOOD'.encode())
         self.getfile()
 
     def listen(self):
@@ -640,8 +640,6 @@ class Client:
                 data = txt.read(self.BUF)
                 s += len(data)
                 self.client.send(data)
-                time.sleep(0.005)
-
 
 if __name__ == '__main__':
     print('___INITIALIZING___')

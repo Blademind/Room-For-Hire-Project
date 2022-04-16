@@ -15,10 +15,10 @@ from PIL import Image, ImageTk
 import os
 from tkcalendar import DateEntry
 import ssl
-
 from tkinter import ttk
+
 """
-Client by Alon Levy
+Admin by Alon Levy
 This aims to allow user interaction of which
 he can personalize and buy rooms.
 """
@@ -26,7 +26,7 @@ he can personalize and buy rooms.
 file = __file__
 
 
-class Client:
+class Admin:
     def __init__(self):
         self.servertime = datetime.datetime.today().date()
         self.client = socket(AF_INET, SOCK_STREAM)
@@ -42,7 +42,9 @@ class Client:
         self.__user = ['Guest', None]
         self.__creds = None
         print('___SUCCESS___')
-        self.main()
+        self.login()
+        if self.__user[0] != 'Guest':
+            self.main()
 
     def getfile(self):
         data = self.client.recv(self.BUF)
@@ -70,6 +72,7 @@ class Client:
     def listen(self):
         while 1:
             data = self.client.recv(self.BUF)
+            print(data)
             if not data:
                 break
             try:
@@ -80,6 +83,9 @@ class Client:
                 elif 'Error:' in datacontent:
                     tkinter.messagebox.showerror(message=datacontent)
                 elif 'Success' in datacontent:
+                    self.__user[0] = data.decode()[8:]
+                    self.__user[1] = self.__attempt
+                    self.log.destroy()
                     self.log1.config(text='Logout', command=self.logout)
                     self.recent = Button(self.root,
                                          command=self.orders, text='Recent orders', font=('Helvetica', 11),
@@ -87,12 +93,9 @@ class Client:
                                          bg='#252221', fg='lightgray', activebackground='lightgray',
                                          activeforeground='#252221')
                     self.recent.grid(column=2, row=0, sticky=W)
-                    self.reg1.grid_forget()
-                    self.__user[0] = data.decode()[8:]
-                    self.__user[1] = self.__attempt
+
                     self.user1.config(text=f'Welcome,\n{self.__user[0]}')
                     tkinter.messagebox.showinfo(message='Success')
-
                 elif datacontent == 'DESTROY':
                     self.root3.destroy()
                     self.root3 = None
@@ -109,13 +112,13 @@ class Client:
             except Exception as e:
                 print(e)
                 self.recorders = pickle.loads(data)[0]
-                #if pickle.loads(data)[1][4] == 1:
-                #    self.change = Button(self.root,
-                #                         command=self.change_date_tk, text='Change Date', font=('Helvetica', 11),
-                #                         cursor='hand2',
-                #                         bg='#252221', fg='lightgray', activebackground='lightgray',
-                #                         activeforeground='#252221')
-                #    self.change.grid(column=2, row=0)
+                if pickle.loads(data)[1][4] == 1:
+                    self.change = Button(self.root,
+                                         command=self.change_date_tk, text='Change Date', font=('Helvetica', 11),
+                                         cursor='hand2',
+                                         bg='#252221', fg='lightgray', activebackground='lightgray',
+                                         activeforeground='#252221')
+                    self.change.grid(column=2, row=0)
 
     def rating(self, name):
         rate = Tk()
@@ -221,9 +224,6 @@ class Client:
         self.root.grid_columnconfigure(2, weight=1)
         self.root.grid_rowconfigure(1, weight=1)
         self.root.grid_rowconfigure(2, weight=1)
-        self.reg1 = Button(self.root, command=self.register, text='Register', font=('Helvetica', 11), cursor='hand2',
-                           bg='#252221', fg='lightgray', activebackground='lightgray', activeforeground='#252221')
-        self.reg1.grid(column=0, row=0)
         self.log1 = Button(self.root, command=self.login, text='Login', font=('Helvetica', 11), cursor='hand2',
                            bg='#252221', fg='lightgray', activebackground='lightgray',
                            activeforeground='#252221')
@@ -511,47 +511,6 @@ class Client:
         self.root6.destroy()
         self.askroom()
 
-    def register(self):
-        self.reg = Tk()
-        self.reg.bind('<Return>', self.register_send)
-        self.reg.config(bg='#252221')
-        f = ('Helvetica', 14)
-
-        self.right_frame = Frame(self.reg, bd=2, bg='#CCCCCC', padx=10, pady=10)
-        Label(self.right_frame, text="Name", bg='#CCCCCC', font=f).grid(row=0, column=0, sticky=W, pady=10)
-        Label(self.right_frame, text="Email", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
-        Label(self.right_frame, text="Country", bg='#CCCCCC', font=f).grid(row=2, column=0, sticky=W, pady=10)
-        Label(self.right_frame, text="Password", bg='#CCCCCC', font=f).grid(row=5, column=0, sticky=W, pady=10)
-        Label(self.right_frame, text="Re-Enter Password", bg='#CCCCCC', font=f).grid(row=6, column=0, sticky=W, pady=10)
-        name = Entry(self.right_frame, font=f)
-        email = Entry(self.right_frame, font=f)
-        country = Entry(self.right_frame, font=f)
-        pwd = Entry(self.right_frame, font=f, show='*')
-        pwd_again = Entry(self.right_frame, font=f, show='*')
-        message = Label(self.reg, bg='#252221', font=f)
-
-        register = Button(self.right_frame,
-                          command=lambda: self.register_send(name, email,country, pwd, pwd_again, message),
-                          width=15, text='Register', font=('Helvetica', 11), cursor='hand2', bg='#252221',
-                          fg='lightgray', activebackground='lightgray',
-                          activeforeground='#252221')
-        close = Button(self.right_frame, command=self.reg.destroy, text='Close', width=15, font=('Helvetica', 11),
-                       cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
-                       activeforeground='#252221')
-        self.right_frame.grid(row=0)
-        message.grid(row=1, sticky=W, pady = 5)
-        name.grid(row=0, column=1, pady=10, padx=20)
-        email.grid(row=1, column=1, pady=10, padx=20)
-        country.grid(row=2, column=1, pady=10, padx=20)
-        pwd.grid(row=5, column=1, pady=10, padx=20)
-        pwd_again.grid(row=6, column=1, pady=10, padx=20)
-        close.grid(row=7, column=1, pady=10, padx=10)
-        register.grid(row=7, column=0, pady=10, padx=10)
-
-        self.midwin(self.reg, 500, 350)
-
-        self.reg.mainloop()
-
     def update_clock(self, c):
         flag = True
         if c >= 0:
@@ -589,24 +548,50 @@ class Client:
                 self.__attempt = pwd
                 self.reg.destroy()
 
+    def change_date_tk(self):
+        date_root = Tk()
+        date_root.config(bg='lightgray')
+        lb3 = Label(date_root, text='When would you like to change the date to?', font=("Helvetica", 15), bg='#252221',
+                    fg='lightgray')
+        lb3.pack(fill=BOTH)
+        dates = DateEntry(date_root, font=('Helvetica', 14), locale='en_IL', date_pattern='dd/mm/yyyy',
+                          mindate=datetime.datetime.today() + datetime.timedelta(days=1), showweeknumbers=0)
+        dates.pack(pady=10)
+        submit = Button(date_root, text='Submit',
+                        command=lambda: [self.change_date(dates.get_date()), date_root.destroy()], bg='#252221',
+                        fg='lightgray', activebackground='lightgray', activeforeground='#252221', padx=10,
+                        cursor='hand2')
+        submit.pack(pady=10, side=RIGHT)
+
+        close = Button(date_root, text='Close', command=date_root.destroy, bg='#252221', fg='lightgray',
+                       activebackground='lightgray',
+                       activeforeground='#252221', padx=10, cursor='hand2')  # Destroy popup window
+        close.pack(pady=10, side=RIGHT)
+
+        self.midwin(date_root, 400, 175)  # place window in the center
+
+    def change_date(self, date):
+        self.client.send('DATE'.encode())
+        self.client.send(pickle.dumps(date))
+
     def login(self):
-        log = Tk()
-        log.config(bg='#252221')
-        log.bind('<Return>', lambda event: [self.loginsend(email.get(), pwd.get(), log, message)])
+        self.log = Tk()
+        self.log.config(bg='#252221')
+        self.log.bind('<Return>', lambda event: [self.loginsend(email.get(), pwd.get(), message)])
         f = ('Helvetica', 14)
-        right_frame = Frame(log, bd=2, bg='#CCCCCC', padx=10, pady=10)
+        right_frame = Frame(self.log, bd=2, bg='#CCCCCC', padx=10, pady=10)
         Label(right_frame, text="Email", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
         Label(right_frame, text="Password", bg='#CCCCCC', font=f).grid(row=5, column=0, sticky=W, pady=10)
 
         email = Entry(right_frame, font=f)
         pwd = Entry(right_frame, font=f, show='*')
-        message = Label(log, bg='#252221', font=f)
+        message = Label(self.log, bg='#252221', font=f)
         login = Button(right_frame,
-                       command=lambda: [self.loginsend(email.get(), pwd.get(), log, message)],
+                       command=lambda: [self.loginsend(email.get(), pwd.get(), message)],
                        width=15, text='Login', font=('Helvetica', 11), cursor='hand2', bg='#252221', fg='lightgray',
                        activebackground='lightgray',
                        activeforeground='#252221')
-        close = Button(right_frame, command=log.destroy, text='Close', width=15, font=('Helvetica', 11), cursor='hand2',
+        close = Button(right_frame, command=self.log.destroy, text='Close', width=15, font=('Helvetica', 11), cursor='hand2',
                        bg='#252221', fg='lightgray', activebackground='lightgray',
                        activeforeground='#252221')
         right_frame.grid(row=0)
@@ -615,8 +600,8 @@ class Client:
         pwd.grid(row=5, column=1, pady=10, padx=20)
         close.grid(row=7, column=1, pady=10, padx=10)
         login.grid(row=7, column=0, pady=10, padx=10)
-        self.midwin(log, 500, 225)
-        log.mainloop()
+        self.midwin(self.log, 500, 225)
+        self.log.mainloop()
 
     def addroom(self):
         self.roomroot = Tk()
@@ -744,7 +729,7 @@ class Client:
         right_frame3.pack()
         self.midwin(root7, 500, 250)
 
-    def commit_purchase(self, root7):
+    def commit_purchase(self,root7):
         self.conn.cursor().execute('INSERT INTO Bought(RoomName, Buyer, First, Last)  '
                               'VALUES(?,?,?,?)',
                               (self.row[0], self.__user[0], self.duration1.get_date().strftime('%d/%m/%Y'),
@@ -764,14 +749,13 @@ class Client:
         self.removeinst(self.row)
         self.row = None
 
-    def loginsend(self, email, pwd, log, message):
+    def loginsend(self, email, pwd, message):
         mail_re = re.compile('^[\w\.]+@([\w-]+\.)+[\w-]{2,4}$')
         pass_re = re.compile("^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$")
         if mail_re.match(email) is not None and pass_re.match(pwd) is not None:
             self.client.send('CRED'.encode())
             self.client.send(pickle.dumps([email, pwd]))
             self.__attempt = pwd
-            log.destroy()
         else:
             message.config(text='Invalid mail or password', bg='#CCCCCC')
 
@@ -779,7 +763,9 @@ class Client:
         self.__user = ['Guest', None]
         self.recorders = []
         self.root.destroy()
-        self.main()
+        self.login()
+        if self.__user[0] != 'Guest':
+            self.main()
 
     # Do you wish to exit the program entirely?
     def pop(self, root):
@@ -820,6 +806,6 @@ class Client:
 if __name__ == '__main__':
     print('___INITIALIZING___')
     try:
-        c = Client()
+        a = Admin()
     except ConnectionRefusedError:
         print('COULD NOT CONNECT')

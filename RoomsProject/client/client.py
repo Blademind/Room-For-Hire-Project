@@ -9,6 +9,8 @@ from socket import *
 from tkinter import *
 import _thread
 import sqlite3
+
+import tkintermapview
 from tkintermapview import TkinterMapView
 from tkinter import filedialog
 from PIL import Image, ImageTk
@@ -35,6 +37,8 @@ class Client:
         self.client.connect(self.ADDR)
         self.client = ssl.wrap_socket(self.client, server_side=False, keyfile='privkey.pem', certfile='certificate.pem')
         self.images = pickle.loads(self.client.recv(self.BUF))
+        self.attraction_images = pickle.loads(self.client.recv(self.BUF))
+        self.world_active = False
         self.getimage()
         self.recorders = []
         self.server = self.client.getpeername()
@@ -44,10 +48,10 @@ class Client:
         print('___SUCCESS___')
         self.main()
 
-    def getfile(self):
+    def get_database(self, name):
         data = self.client.recv(self.BUF)
         img = pickle.loads(data)
-        with open(f'Databases/database.db', 'wb') as txt:
+        with open(f'Databases/{name}.db', 'wb') as txt:
             s = 0
             while s != img:
                 data2 = self.client.recv(self.BUF)
@@ -65,7 +69,16 @@ class Client:
                     data2 = self.client.recv(self.BUF)
                     txt.write(data2)
                     s += len(data2)
-        self.getfile()
+        for name in self.attraction_images:
+            data = self.client.recv(self.BUF)
+            img = pickle.loads(data)
+            s = 0
+            with open(f'Attractions_images/{name}', 'wb') as txt:
+                while s != img:
+                    data2 = self.client.recv(self.BUF)
+                    txt.write(data2)
+                    s += len(data2)
+        self.get_database('database')
 
     def listen(self):
         while 1:
@@ -76,8 +89,12 @@ class Client:
                 datacontent = data.decode()
                 if datacontent == 'FILES':
                     self.images = pickle.loads(self.client.recv(self.BUF))
+                    self.attraction_images = pickle.loads((self.client.recv(self.BUF)))
                     self.getimage()
-                elif 'Error:' in datacontent:
+                    if self.world_active:
+                        self.clear(self.root2)
+                        self.worldrooms("Normal", False)
+                elif 'Error:' in datacontent or 'Exists:' in datacontent:  # Errors
                     tkinter.messagebox.showerror(message=datacontent)
                 elif 'Success' in datacontent:
                     self.log1.config(text='Logout', command=self.logout)
@@ -92,7 +109,6 @@ class Client:
                     self.__user[1] = self.__attempt
                     self.user1.config(text=f'Welcome,\n{self.__user[0]}')
                     tkinter.messagebox.showinfo(message='Success')
-
                 elif datacontent == 'DESTROY':
                     self.root3.destroy()
                     self.root3 = None
@@ -104,18 +120,20 @@ class Client:
                     self.servertime = pickle.loads(self.client.recv(self.BUF))
                     if self.__user[0] != 'Guest':
                         self.client.send('RATE'.encode())
-                        print(self.__user)
                         self.client.send(pickle.dumps(self.__user))
             except Exception as e:
                 print(e)
-                self.recorders = pickle.loads(data)[0]
-                #if pickle.loads(data)[1][4] == 1:
-                #    self.change = Button(self.root,
-                #                         command=self.change_date_tk, text='Change Date', font=('Helvetica', 11),
-                #                         cursor='hand2',
-                #                         bg='#252221', fg='lightgray', activebackground='lightgray',
-                #                         activeforeground='#252221')
-                #    self.change.grid(column=2, row=0)
+                try:
+                    if type(pickle.loads(data)[0]) is not bool:
+                        self.recorders = pickle.loads(data)[0]
+                        print(self.recorders)
+                    else:  # CHECK RESULTS
+                        if pickle.loads(data)[0]:  # if passed
+                            self.purchase_screen(pickle.loads(data)[1])  # (total)
+                        else:
+                            tkinter.messagebox.showinfo(self.root3,message='The selected date is taken')
+                            self.removeinst(self.row)
+                except: pass
 
     def rating(self, name):
         rate = Tk()
@@ -139,7 +157,7 @@ class Client:
 
     def rate(self, scale, name):
         self.client.send('RATING'.encode())
-        self.client.send(pickle.dumps([scale, name]))
+        self.client.send(pickle.dumps([scale, name, self.__user[0]]))
         print(f'SENT {scale}')
 
     def orders(self):
@@ -156,6 +174,9 @@ class Client:
                            bg='#252221', fg='lightgray', activebackground='lightgray',
                            activeforeground='#252221')
             close.grid()
+            scrollbar = ttk.Scrollbar(self.root5, orient=VERTICAL, command=orders1.yview)
+            orders1.configure(yscrollcommand=scrollbar.set)
+            scrollbar.grid(row=0, column=1, sticky='ns')
             orders1.bind('<Double-1>', lambda event: self.details(self.recorders[orders1.curselection()[0]]))
         else:
             tkinter.messagebox.showinfo(message='You have not placed any order')
@@ -205,15 +226,16 @@ class Client:
         self.root4.mainloop()
 
     def cancel(self, line):
-        self.conn = sqlite3.connect('Databases/database.db')
-        self.conn.cursor().execute(f'DELETE FROM Bought WHERE RoomName=? AND Buyer=?;', (line[0], self.__user[0]))
-        self.conn.commit()
-        self.conn.close()
         self.recorders.remove(line)
         line = list(line)
         line.append(self.__user[0])
         self.client.send('UPDATE'.encode())
         self.client.send(pickle.dumps(line))
+
+    def clear(self, root):
+        """Clear all widgets within a root"""
+        for widget in root.winfo_children():
+            widget.destroy()
 
     def main(self):
         self.root = Tk()
@@ -232,7 +254,7 @@ class Client:
                            bg='#252221', fg='lightgray', activebackground='lightgray',
                            activeforeground='#252221')
         self.user1.grid(column=5, row=0, sticky=E)
-        findroom = Button(self.root, command=self.worldrooms, width=25, height=2,
+        findroom = Button(self.root, command=lambda: self.worldrooms("Normal", True), width=25, height=2,
                           text='Find a Room', font=('Helvetica', 14),
                           cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
                           activeforeground='#252221')
@@ -263,8 +285,11 @@ class Client:
         self.map.set_address(self.message.get())
         self.message.delete(0, END)
 
-    def worldrooms(self):
-        self.root2 = Toplevel()
+    def worldrooms(self, mode, flag):
+        """Map of the world showing all locations added and ready / not ready for purchase"""
+        self.world_active = True
+        if flag:
+            self.root2 = Toplevel()
         self.root2.grid_columnconfigure(0, weight=1)
         self.root2.grid_columnconfigure(1, weight=1)
         self.root2.grid_rowconfigure(0, weight=1)
@@ -274,17 +299,21 @@ class Client:
         self.root2.config(bg='lightgray')
         self.root2.geometry('800x600')
         self.map = TkinterMapView(self.root2, width=800, height=550, corner_radius=0)
-        self.map.set_tile_server("https://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}&s=Ga",max_zoom=22)
+        self.map.set_tile_server("https://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}&s=Ga", max_zoom=22) \
+            if mode == 'Normal' else self.map.set_tile_server("https://mt0.google.com/vt/lyrs=s&hl=en&x={x}&y={y}&z={z}&s=Ga", max_zoom=22)
         self.map.set_address('Israel')
         self.map.set_zoom(7)
         self.map.grid(row=0, column=0, sticky='nsew')
         conn = sqlite3.connect('Databases/database.db')
         cursor = conn.cursor().execute('SELECT * FROM Offered')
         self.all = cursor.fetchall()
+        cursor = conn.cursor().execute('SELECT * FROM Attractions')
+        self.all_attractions = cursor.fetchall()
         conn.close()
+
         for row in self.all:
             self.cord = row[2].split(' ')
-            if row[7] != 1:
+            if len(self.recorders) == 0 or any(row[0] != element[0] for element in self.recorders):  # Did the user already buy the room?
                 mindate = row[4].split('/')
                 maxdate = row[5].split('/')
                 mindate = datetime.datetime(int(mindate[2]), int(mindate[1]), int(mindate[0]))
@@ -295,12 +324,22 @@ class Client:
                                     marker_color_circle="black",
                                     marker_color_outside="gray40", text=row[0],
                                     command=lambda here=row: self.askroomtk(here, mindate, maxdate))
+        for row in self.all_attractions:
+            self.cord = row[0].split(' ')
+            img = ImageTk.PhotoImage(Image.open(f'Attractions_images/{row[1]}').resize((150, 150)))
+            marker = self.map.set_marker(float(self.cord[0]), float(self.cord[1]), image=img,
+                                image_zoom_visibility=(5, 22),
+                                marker_color_circle="white",
+                                marker_color_outside="gray40", command=lambda here=row: self.marker_interaction(here))
+            marker.hide_image(True)
         options = OptionMenu(self.root2, self.val, *["Price", "Proximity"], command=self.display_selected)
         options.grid(row=0, column=1, sticky='new', columnspan=2)
         self.orders2 = Listbox(self.root2, font=('Helvetica', 12), bg='#CCCCCC')
         self.orders2.grid(row=0, column=1, columnspan=2,sticky='nsew', pady=30)
-        self.orders2.bind('<Double-1>', lambda event: [[self.map.set_address(sub[2]), self.map.set_zoom(10)] for sub in self.all if self.orders2.get(self.orders2.curselection()[0]) in sub])
-        mode = Button(self.root2, command=lambda: self.change_map_mode(mode), text='Satellite', font=('Helvetica', 11),
+        self.orders2.bind('<Double-1>', lambda event: [[self.map.set_address(sub[2]), self.map.set_zoom(10)]
+                                                       for sub in self.all if len(self.orders2.curselection()) != 0 and
+                                                       self.orders2.get(self.orders2.curselection()[0]) in sub])
+        mode = Button(self.root2, command=lambda: self.change_map_mode(mode), text='Satellite' if mode == 'Normal' else 'Normal', font=('Helvetica', 11),
                              cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
                              activeforeground='#252221')
         mode.grid(row=0, column=1,sticky="se")
@@ -308,7 +347,7 @@ class Client:
                              font=("Helvetica", 15, 'bold'), width=60)  # user entry, sent to server
         self.message.grid(row=1, column=0, pady=10, sticky='we')
         self.message.focus()
-        self.close2 = Button(self.root2, command=self.root2.destroy, text='Close', font=('Helvetica', 11),
+        self.close2 = Button(self.root2, command=self.close_map, text='Close', font=('Helvetica', 11),
                              cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
                              activeforeground='#252221')
         self.close2.grid(row=1, column=2, pady=10,sticky='e')
@@ -319,13 +358,17 @@ class Client:
         self.midwin(self.root2, 900, 600)
         self.root2.mainloop()
 
+    def close_map(self):
+        self.world_active = False
+        self.root2.destroy()
+
     def change_map_mode(self, mode):
         if mode.cget('text') == "Satellite":
-            self.map.set_tile_server("https://mt0.google.com/vt/lyrs=s&hl=en&x={x}&y={y}&z={z}&s=Ga", max_zoom=22)
-            mode.config(text="Normal")
+            self.clear(self.root2)
+            self.worldrooms("Satellite", False)
         else:
-            self.map.set_tile_server("https://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}&s=Ga", max_zoom=22)
-            mode.config(text="Satellite")
+            self.clear(self.root2)
+            self.worldrooms("Normal", False)
 
     def distance(self, a):
         current = self.map.get_position()
@@ -368,7 +411,7 @@ class Client:
             time.sleep(1)
 
     def askroomtk(self, row, mindate, maxdate):
-        try:
+        try:  # does an active root exist?
             self.root3
         except:
             self.root3 = None
@@ -380,7 +423,6 @@ class Client:
             self.root3 = Toplevel()
             self.root3.protocol("WM_DELETE_WINDOW", lambda: [self.removeinst(self.row),
                                             self.root3.destroy(), self.reset_root3()])
-
             self.root3.config(bg='#252221')
             self.client.send('OCC'.encode())
             self.client.send(pickle.dumps(self.row))
@@ -393,10 +435,10 @@ class Client:
             Label(right_frame, text="Conditions", bg='#CCCCCC', font=f).grid(row=2, column=1, sticky=W, pady=10)
             Label(right_frame, text="From", bg='#CCCCCC', font=f).grid(row=3, column=1, sticky=W, pady=10)
             Label(right_frame, text="Until", bg='#CCCCCC', font=f).grid(row=4, column=1, sticky=W, pady=10)
-            Label(right_frame, text="Check-in", bg='#CCCCCC', font=f).grid(row=6, column=1, sticky=W, pady=10)
-            Label(right_frame, text="Check-out", bg='#CCCCCC', font=f).grid(row=7, column=1, sticky=W, pady=10)
-            Label(right_frame, text="Where", bg='#CCCCCC', font=f).grid(row=8, column=1, sticky=W, pady=10)
-            Label(right_frame, text="Recipient", bg='#CCCCCC', font=f).grid(row=9, column=1, sticky=W, pady=10)
+            Label(right_frame, text="Check-in", bg='#CCCCCC', font=f).grid(row=5, column=1, sticky=W, pady=10)
+            Label(right_frame, text="Check-out", bg='#CCCCCC', font=f).grid(row=6, column=1, sticky=W, pady=10)
+            Label(right_frame, text="Where", bg='#CCCCCC', font=f).grid(row=7, column=1, sticky=W, pady=10)
+            Label(right_frame, text="Recipient", bg='#CCCCCC', font=f).grid(row=8, column=1, sticky=W, pady=10)
 
             cord = self.row[2].split(' ')
             conditions = Label(right_frame, text=f'{self.row[8]}', font=f, bg='#CCCCCC')
@@ -404,11 +446,10 @@ class Client:
             when = Label(right_frame, text=f'{self.row[4]}', font=f, bg='#CCCCCC')
             until = Label(right_frame, text=f'{self.row[5]}', font=f, bg='#CCCCCC')
             if self.row[-2] is not None:
-                Label(right_frame, text="Rating", bg='#CCCCCC', font=f).grid(row=5, column=1, sticky=W, pady=10)
+                Label(right_frame, text="Rating", bg='#CCCCCC', font=f).grid(row=9, column=1, sticky=W, pady=10)
                 rating = Label(right_frame, text=f'{self.row[-2]} / 10', font=f, bg='#CCCCCC')
-                rating.grid(row=5, column=2, pady=10, padx=20)
-
-            self.where = Label(right_frame, text=f'{format(float(cord[0]), ".2f"), format(float(cord[1]), ".2f")}',
+                rating.grid(row=9, column=2, pady=10, padx=20)
+            self.where = Label(right_frame, text=f'{tkintermapview.convert_coordinates_to_address(float(cord[0]), float(cord[1])).street}',
                                font=f,
                                bg='#CCCCCC')
             self.recipient = Label(right_frame, text=f'{self.row[1]}', font=f, bg='#CCCCCC')
@@ -435,10 +476,10 @@ class Client:
             conditions.grid(row=2, column=2, pady=10, padx=20)
             when.grid(row=3, column=2, pady=10, padx=20)
             until.grid(row=4, column=2, pady=10, padx=20)
-            self.duration1.grid(row=6, column=2, pady=10)
-            self.duration2.grid(row=7, column=2, pady=10)
-            self.where.grid(row=8, column=2, pady=10, padx=20)
-            self.recipient.grid(row=9, column=2, pady=10, padx=20)
+            self.duration1.grid(row=5, column=2, pady=10)
+            self.duration2.grid(row=6, column=2, pady=10)
+            self.where.grid(row=7, column=2, pady=10, padx=20)
+            self.recipient.grid(row=8, column=2, pady=10, padx=20)
             close.grid(row=10, column=2, pady=10, padx=10)
             proceed.grid(row=10, column=1, pady=10, padx=10)
             right_frame.grid()
@@ -449,6 +490,12 @@ class Client:
         self.client.send('REM'.encode())
         self.client.send(pickle.dumps(row))
 
+    def marker_interaction(self, marker):
+        if marker.image_hidden is True:
+            marker.hide_image(False)
+        else:
+            marker.hide_image(True)
+
     def reset_root3(self):
         self.root3 = None
 
@@ -456,34 +503,8 @@ class Client:
         if self.__user[0] == 'Guest':
             self.guestmail()
         elif self.duration1.get_date() < self.duration2.get_date():
-            total = 0
-            self.conn = sqlite3.connect('Databases/database.db')
-            self.cursor = self.conn.cursor().execute('SELECT First, Last FROM Bought WHERE RoomName=?', (self.row[0],))
-            dates = self.cursor.fetchall()
-            final_dates1 = []
-            final_dates2 = []
-            flag = True
-            for date in dates:
-                start = datetime.datetime.strptime(date[0], '%d/%m/%Y')
-                finish = datetime.datetime.strptime(date[1], '%d/%m/%Y')
-                while start < finish:
-                    final_dates1.append(start.date())
-                    start += datetime.timedelta(days=1)
-            start = self.duration1.get_date()
-            finish = self.duration2.get_date()
-            while start < finish:
-                total += self.row[3]
-                final_dates2.append(start)
-                start += datetime.timedelta(days=1)
-            for i in final_dates2:
-                if i in final_dates1:
-                    flag = False
-                    break
-            if flag:
-                self.purchase_screen(total)
-            else:
-                tkinter.messagebox.showinfo(message='The selected date is taken')
-                self.removeinst(self.row)
+            self.client.send('CHECK'.encode())
+            self.client.send(pickle.dumps((self.row, self.duration1.get_date(), self.duration2.get_date())))
 
     def guestmail(self):
         self.root6 = Tk()
@@ -492,24 +513,31 @@ class Client:
         self.right_frame2 = Frame(self.root6, bd=2, bg='#CCCCCC', padx=10, pady=10)
         Label(self.right_frame2, text="Email", bg='#CCCCCC', font=f).grid(row=0, column=0, sticky=W, pady=10)
         self.name = Entry(self.right_frame2, font=f)
+        message = Label(self.right_frame2, bg='#CCCCCC', font=f)
         submit = Button(self.right_frame2,
-                        command=lambda: self.submitguestname(self.name.get()),
+                        command=lambda: self.submitguestname(self.name.get(), message),
                         width=15, text='Submit', font=('Helvetica', 11), cursor='hand2', bg='#252221',
                         fg='lightgray', activebackground='lightgray',
                         activeforeground='#252221')
         close = Button(self.right_frame2, command=self.root6.destroy, text='Close', width=15, font=('Helvetica', 11),
                        cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
                        activeforeground='#252221')
-        self.name.grid(row=0, column=1, pady=10, padx=20)
-        close.grid(row=1, column=1, pady=10, padx=10)
-        submit.grid(row=1, column=0, pady=10, padx=10)
+        self.name.grid(row=0, column=1, sticky=W, pady=10)
+        message.grid(row=1, column=0, sticky=W, pady=10)
+        close.grid(row=2, column=1, pady=10, padx=10)
+        submit.grid(row=2, column=0, pady=10, padx=10)
+
         self.right_frame2.pack()
         self.midwin(self.root6, 500, 250)
 
-    def submitguestname(self, mail):
-        self.__user[0] = mail
-        self.root6.destroy()
-        self.askroom()
+    def submitguestname(self, mail, message):
+        mail_re = re.compile('^[\w\.]+@([\w-]+\.)+[\w-]{2,4}$')
+        if mail_re.match(mail) is None:
+            message.config(text="Invalid Email", bg='#252221', fg='#CCCCCC')
+        else:
+            self.__user[0] = mail
+            self.root6.destroy()
+            self.askroom()
 
     def register(self):
         self.reg = Tk()
@@ -562,6 +590,7 @@ class Client:
         else:
             if self.root3 is not None:
                 self.root3.destroy()
+                self.root3 = None
             flag = False
         if flag:
             self.root.after(1000, lambda: self.update_clock(c - 1))
@@ -673,6 +702,7 @@ class Client:
         self.roomroot.attributes('-topmost', True)
 
     def addsend(self):
+        """ Sends data of room adding after done inspecting it """
         err = False
         try:
             self.filename
@@ -698,21 +728,12 @@ class Client:
                         f', {self.__user[0]}, {self.filename[self.filename.rfind("/") + 1:]},'
                         f' {self.conditions.get()}'.encode())
                     self.sendimage()
+                    self.filename = ''
+
                 else:
                     self.message.config(text='values must be valid', bg='#CCCCCC')
                     err = True
                 if not err:
-                    conn = sqlite3.connect('Databases/database.db')
-                    cursor = conn.cursor()
-                    cursor.execute(
-                        'INSERT INTO Offered (RoomName, By, Coordinates,'
-                        ' Price, First, Last, ImagePath, Conditions) VALUES (?,?,?,?,?,?,?,?)',
-                        (self.roomname.get(), self.__user[0], f'{c[0]} {c[1]}',
-                         int(self.price.get()),
-                         self.duration[0],
-                         self.duration[1], self.filename[self.filename.rfind("/") + 1:], self.conditions.get()))
-                    conn.commit()
-                    conn.close()
                     self.roomroot.destroy()
             else:
                 self.message.config(text='Invalid place', bg='#CCCCCC')
@@ -721,7 +742,7 @@ class Client:
             self.message.config(text='Guests cannot add rooms', bg='#CCCCCC')
 
     def purchase_screen(self, total):
-        root7 = Tk()
+        root7 = Toplevel()
         root7.config(bg='#252221')
         f = ('Helvetica', 14)
         right_frame3 = Frame(root7, bd=2, bg='#CCCCCC', padx=10, pady=10)
@@ -745,19 +766,13 @@ class Client:
         self.midwin(root7, 500, 250)
 
     def commit_purchase(self, root7):
-        self.conn.cursor().execute('INSERT INTO Bought(RoomName, Buyer, First, Last)  '
-                              'VALUES(?,?,?,?)',
-                              (self.row[0], self.__user[0], self.duration1.get_date().strftime('%d/%m/%Y'),
-                               self.duration2.get_date().strftime('%d/%m/%Y')))
-        self.conn.commit()
-        self.conn.close()
-        self.row = list(self.row)
-        self.recorders.append(self.row)
-        self.row[4], self.row[5] = self.duration1.get_date().strftime(
+        row = list(self.row)
+        self.recorders.append(row)
+        row[4], row[5] = self.duration1.get_date().strftime(
             '%d/%m/%Y'), self.duration2.get_date().strftime('%d/%m/%Y')
-        self.row.append(self.__user[0])
+        row.append(self.__user[0])
         self.client.send('BUY'.encode())
-        self.client.send(pickle.dumps(self.row))
+        self.client.send(pickle.dumps(row))
         self.root3.destroy()
         root7.destroy()
         self.reset_root3()

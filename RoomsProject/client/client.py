@@ -81,6 +81,7 @@ class Client:
         self.get_database('database')
 
     def listen(self):
+        flag = True  # used in case of admin using client interface
         while 1:
             data = self.client.recv(self.BUF)
             if not data:
@@ -93,7 +94,7 @@ class Client:
                     self.getimage()
                     if self.world_active:
                         self.clear(self.root2)
-                        self.worldrooms("Normal", False)
+                        self.worldrooms('Normal', False)
                 elif 'Error:' in datacontent or 'Exists:' in datacontent:  # Errors
                     tkinter.messagebox.showerror(message=datacontent)
                 elif 'Success' in datacontent:
@@ -124,9 +125,10 @@ class Client:
             except Exception as e:
                 print(e)
                 try:
-                    if type(pickle.loads(data)[0]) is not bool:
+                    if type(pickle.loads(data)[0]) is not bool and flag:
                         self.recorders = pickle.loads(data)[0]
                         print(self.recorders)
+                        flag = False
                     else:  # CHECK RESULTS
                         if pickle.loads(data)[0]:  # if passed
                             self.purchase_screen(pickle.loads(data)[1])  # (total)
@@ -310,7 +312,14 @@ class Client:
         cursor = conn.cursor().execute('SELECT * FROM Attractions')
         self.all_attractions = cursor.fetchall()
         conn.close()
-
+        self.dict_closeby = {}
+        self.dict_closeby = dict.fromkeys(self.all_attractions, [])
+        for attraction in self.all_attractions:
+            self.dict_closeby[attraction] = []
+        for attraction in self.all_attractions:
+            for place in self.all:
+                if self.check_radius(place, attraction):
+                    self.dict_closeby[attraction].append(place)
         for row in self.all:
             self.cord = row[2].split(' ')
             if len(self.recorders) == 0 or any(row[0] != element[0] for element in self.recorders):  # Did the user already buy the room?
@@ -325,20 +334,21 @@ class Client:
                                     marker_color_outside="gray40", text=row[0],
                                     command=lambda here=row: self.askroomtk(here, mindate, maxdate))
         for row in self.all_attractions:
-            self.cord = row[0].split(' ')
-            img = ImageTk.PhotoImage(Image.open(f'Attractions_images/{row[1]}').resize((150, 150)))
+            self.cord = row[1].split(' ')
+            img = ImageTk.PhotoImage(Image.open(f'Attractions_images/{row[2]}').resize((150, 150)))
             marker = self.map.set_marker(float(self.cord[0]), float(self.cord[1]), image=img,
                                 image_zoom_visibility=(5, 22),
                                 marker_color_circle="white",
                                 marker_color_outside="gray40", command=lambda here=row: self.marker_interaction(here))
             marker.hide_image(True)
-        options = OptionMenu(self.root2, self.val, *["Price", "Proximity"], command=self.display_selected)
+
+        options = OptionMenu(self.root2, self.val, *["Price(ASC.)", "Price(DESC.)", "Proximity(ASC.)", *[attraction[0] for attraction in self.dict_closeby.keys()]], command=self.display_selected)
         options.grid(row=0, column=1, sticky='new', columnspan=2)
         self.orders2 = Listbox(self.root2, font=('Helvetica', 12), bg='#CCCCCC')
         self.orders2.grid(row=0, column=1, columnspan=2,sticky='nsew', pady=30)
         self.orders2.bind('<Double-1>', lambda event: [[self.map.set_address(sub[2]), self.map.set_zoom(10)]
                                                        for sub in self.all if len(self.orders2.curselection()) != 0 and
-                                                       self.orders2.get(self.orders2.curselection()[0]) in sub])
+                                                       self.orders2.get(self.orders2.curselection()[0]) == sub[0]])
         mode = Button(self.root2, command=lambda: self.change_map_mode(mode), text='Satellite' if mode == 'Normal' else 'Normal', font=('Helvetica', 11),
                              cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
                              activeforeground='#252221')
@@ -379,18 +389,32 @@ class Client:
         self.orders2.delete(0, END)
         choice = self.val.get()
         conn = sqlite3.connect('Databases/database.db')
-        if choice == 'Price':
+        if choice == 'Price(ASC.)':
             cursor = conn.execute('SELECT * FROM Offered ORDER BY Price;')
             sort = cursor.fetchall()
             for item in sort:
                 self.orders2.insert(END, item[0])
             conn.close()
-        else:
+        elif choice == 'Price(DESC.)':
+            cursor = conn.execute('SELECT * FROM Offered ORDER BY Price DESC;')
+            sort = cursor.fetchall()
+            for item in sort:
+                self.orders2.insert(END, item[0])
+            conn.close()
+        elif choice == 'Proximity(ASC.)':
             self.close = False
             cursor = conn.execute('SELECT Coordinates FROM Offered;')
             data = cursor.fetchall()
             conn.close()
             _thread.start_new_thread(self.update_on_move, (data,))
+        else:
+            for item in self.all_attractions:
+                if item[0] == choice:
+                    place = item
+                    break
+            for item in self.dict_closeby[place]:
+                if len(item) != 0:
+                    self.orders2.insert(END, item[0])
 
     def update_on_move(self, data):
         last2 = None
@@ -546,9 +570,10 @@ class Client:
         f = ('Helvetica', 14)
 
         self.right_frame = Frame(self.reg, bd=2, bg='#CCCCCC', padx=10, pady=10)
-        Label(self.right_frame, text="Name", bg='#CCCCCC', font=f).grid(row=0, column=0, sticky=W, pady=10)
-        Label(self.right_frame, text="Email", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
-        Label(self.right_frame, text="Country", bg='#CCCCCC', font=f).grid(row=2, column=0, sticky=W, pady=10)
+        Label(self.right_frame, width=10, text='Register', bg='#252221', fg='#CCCCCC', font=f).grid(row=0, columnspan=2, sticky='nswe')
+        Label(self.right_frame, text="Name", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
+        Label(self.right_frame, text="Email", bg='#CCCCCC', font=f).grid(row=2, column=0, sticky=W, pady=10)
+        Label(self.right_frame, text="Country", bg='#CCCCCC', font=f).grid(row=3, column=0, sticky=W, pady=10)
         Label(self.right_frame, text="Password", bg='#CCCCCC', font=f).grid(row=5, column=0, sticky=W, pady=10)
         Label(self.right_frame, text="Re-Enter Password", bg='#CCCCCC', font=f).grid(row=6, column=0, sticky=W, pady=10)
         name = Entry(self.right_frame, font=f)
@@ -566,17 +591,17 @@ class Client:
         close = Button(self.right_frame, command=self.reg.destroy, text='Close', width=15, font=('Helvetica', 11),
                        cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
                        activeforeground='#252221')
-        self.right_frame.grid(row=0)
+        self.right_frame.grid()
         message.grid(row=1, sticky=W, pady = 5)
-        name.grid(row=0, column=1, pady=10, padx=20)
-        email.grid(row=1, column=1, pady=10, padx=20)
-        country.grid(row=2, column=1, pady=10, padx=20)
+        name.grid(row=1, column=1, pady=10, padx=20)
+        email.grid(row=2, column=1, pady=10, padx=20)
+        country.grid(row=3, column=1, pady=10, padx=20)
         pwd.grid(row=5, column=1, pady=10, padx=20)
         pwd_again.grid(row=6, column=1, pady=10, padx=20)
         close.grid(row=7, column=1, pady=10, padx=10)
         register.grid(row=7, column=0, pady=10, padx=10)
 
-        self.midwin(self.reg, 500, 350)
+        self.midwin(self.reg, 500, 380)
 
         self.reg.mainloop()
 
@@ -624,6 +649,7 @@ class Client:
         log.bind('<Return>', lambda event: [self.loginsend(email.get(), pwd.get(), log, message)])
         f = ('Helvetica', 14)
         right_frame = Frame(log, bd=2, bg='#CCCCCC', padx=10, pady=10)
+        Label(right_frame, width=10, text='Login', bg='#252221', fg='#CCCCCC', font=f).grid(row=0, columnspan=2, sticky='nswe')
         Label(right_frame, text="Email", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
         Label(right_frame, text="Password", bg='#CCCCCC', font=f).grid(row=5, column=0, sticky=W, pady=10)
 
@@ -644,7 +670,7 @@ class Client:
         pwd.grid(row=5, column=1, pady=10, padx=20)
         close.grid(row=7, column=1, pady=10, padx=10)
         login.grid(row=7, column=0, pady=10, padx=10)
-        self.midwin(log, 500, 225)
+        self.midwin(log, 500, 240)
         log.mainloop()
 
     def addroom(self):
@@ -722,10 +748,10 @@ class Client:
             if c != (52.516268, 13.377694999999989):  # non-generic only
                 if self.roomname.get() != '' and self.price.get().isdigit():
                     self.client.send(
-                        f'ADD {self.roomname.get()}, {c[0]} {c[1]},'
-                        f' {int(self.price.get())},'
-                        f' {self.duration[0]}, {self.duration[1]}'
-                        f', {self.__user[0]}, {self.filename[self.filename.rfind("/") + 1:]},'
+                        f'ADD {self.roomname.get()}. {c[0]} {c[1]}.'
+                        f' {int(self.price.get())}.'
+                        f' {self.duration[0]}. {self.duration[1]}'
+                        f', {self.__user[0]}. {self.filename[self.filename.rfind("/") + 1:]}.'
                         f' {self.conditions.get()}'.encode())
                     self.sendimage()
                     self.filename = ''
@@ -812,6 +838,19 @@ class Client:
                     activeforeground='#252221', padx=10, cursor='hand2')  # Destroy popup window
         no.pack(pady=10, side=RIGHT)
         self.midwin(popup, 300, 80)  # place window in the center
+
+    def check_radius(self, point, attraction):
+        coords = attraction[1].split(' ')
+        point_coords = point[2].split(' ')
+        point_coords[0], point_coords[1] = float(point_coords[0]), float(point_coords[1])
+        coords[0], coords[1] = float(coords[0]), float(coords[1])
+        limitxmax = coords[0] + float(attraction[3])
+        limitxmin = coords[0] - float(attraction[3])
+        limitymax = coords[1] + float(attraction[3])
+        limitymin = coords[1] - float(attraction[3])
+        if limitxmin <= point_coords[0] <= limitxmax and limitymin <= point_coords[1] <= limitymax:
+            return 1
+        return 0
 
     # window placed middle
     def midwin(self, root, x, y):

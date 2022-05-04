@@ -95,8 +95,7 @@ class Admin:
                     self.getimage()
                     if self.world_active:
                         self.clear(self.root2)
-                        self.worldrooms("Normal", False)
-
+                        self.worldrooms('Normal', False)
                 elif 'Error:' in datacontent or 'Exists:' in datacontent:
                     tkinter.messagebox.showerror(message=datacontent)
                 elif 'Success' in datacontent:
@@ -127,7 +126,6 @@ class Admin:
                         self.client.send(pickle.dumps(self.__user))
                 elif datacontent == 'UPDATE':
                     self.all_orders = pickle.loads(self.client.recv(self.BUF))
-                    print(self.all_orders)
                 elif datacontent == 'PUSH':
                     self.get_database('registered')
 
@@ -148,18 +146,23 @@ class Admin:
                                              bg='#252221', fg='lightgray', activebackground='lightgray',
                                              activeforeground='#252221')
                         self.change.grid(column=2, row=0)
-                        self.all_purchases = Button(self.root,
+                        Button(self.root,
                                              command=self.purchases, text='All Purchases', font=('Helvetica', 11),
-                                             cursor='hand2',
+                                             cursor='hand2',height=2,
                                              bg='#252221', fg='lightgray', activebackground='lightgray',
-                                             activeforeground='#252221')
-                        self.all_purchases.grid(row=0, column=3, sticky='w')
-                        self.all_purchases = Button(self.root,
+                                             activeforeground='#252221').grid(row=1, column=5, sticky='e')
+                        Button(self.root,
                                              command=self.users_data, text='All Users', font=('Helvetica', 11),
-                                             cursor='hand2',
+                                             cursor='hand2',height=2,
                                              bg='#252221', fg='lightgray', activebackground='lightgray',
-                                             activeforeground='#252221')
-                        self.all_purchases.grid(row=0, column=2, sticky='e')
+                                             activeforeground='#252221').grid(row=2, column=5, sticky='ne')
+                        Button(self.root,
+                                             command=self.offers_data, text='All Offers', font=('Helvetica', 11),
+                                             cursor='hand2',height=2,
+                                             bg='#252221', fg='lightgray', activebackground='lightgray',
+                                             activeforeground='#252221').grid(row=2, column=5, sticky='e')
+
+
                     else:
                         self.root.withdraw()
                         tkinter.messagebox.showerror(message='Not an admin')
@@ -253,8 +256,6 @@ class Admin:
             buyer.grid(row=6, column=1, pady=10, padx=20)
         except: pass
 
-
-
         self.where = Label(right_frame, text=f'{format(float(cord[0]), ".2f"), format(float(cord[1]), ".2f")}', font=f,
                            bg='#CCCCCC')
         self.recipient = Label(right_frame, text=f'{line[1]}', font=f, bg='#CCCCCC')
@@ -279,13 +280,14 @@ class Admin:
                             text='Cancel', width=15, font=('Helvetica', 11), cursor='hand2',
                             bg='#252221', fg='lightgray', activebackground='lightgray',
                             activeforeground='#252221')
-            cancel.grid(row=6, column=0, pady=10, padx=20)
+            cancel.grid(row=7, column=0, pady=10, padx=20)
 
         right_frame.grid()
         self.root4.mainloop()
 
     def cancel(self, line):
-        self.recorders.remove(line)
+        if line is self.recorders:
+            self.recorders.remove(line)
         line = list(line)
         line.append(self.__user[0])
         self.client.send('UPDATE'.encode())
@@ -364,8 +366,15 @@ class Admin:
         self.all = cursor.fetchall()
         cursor = conn.cursor().execute('SELECT * FROM Attractions')
         self.all_attractions = cursor.fetchall()
-
         conn.close()
+        self.dict_closeby = {}
+        self.dict_closeby = dict.fromkeys(self.all_attractions, [])
+        for attraction in self.all_attractions:
+            self.dict_closeby[attraction] = []
+        for attraction in self.all_attractions:
+            for place in self.all:
+                if self.check_radius(place, attraction):
+                    self.dict_closeby[attraction].append(place)
         for row in self.all:
             self.cord = row[2].split(' ')
             mindate = row[4].split('/')
@@ -379,18 +388,18 @@ class Admin:
                                 marker_color_outside="gray40", text=row[0],
                                 command=lambda here=row: self.askroomtk(here, mindate, maxdate))
         for row in self.all_attractions:
-            self.cord = row[0].split(' ')
-            img = ImageTk.PhotoImage(Image.open(f'Attractions_images/{row[1]}').resize((150, 150)))
+            self.cord = row[1].split(' ')
+            img = ImageTk.PhotoImage(Image.open(f'Attractions_images/{row[2]}').resize((150, 150)))
             marker = self.map.set_marker(float(self.cord[0]), float(self.cord[1]), image=img,
                                 image_zoom_visibility=(5, 22),
                                 marker_color_circle="white",
                                 marker_color_outside="gray40", command=lambda here=row: self.marker_interaction(here))
             marker.hide_image(True)
-        options = OptionMenu(self.root2, self.val, *["Price", "Proximity"], command=self.display_selected)
+        options = OptionMenu(self.root2, self.val, *["Price(ASC.)", "Price(DESC.)", "Proximity(ASC.)", *[attraction[0] for attraction in self.dict_closeby.keys()]], command=self.display_selected)
         options.grid(row=0, column=1, sticky='new', columnspan=2)
         self.orders2 = Listbox(self.root2, font=('Helvetica', 12), bg='#CCCCCC')
         self.orders2.grid(row=0, column=1, columnspan=2,sticky='nsew', pady=30)
-        self.orders2.bind('<Double-1>', lambda event: [[self.map.set_address(sub[2]), self.map.set_zoom(10)] for sub in self.all if self.orders2.get(self.orders2.curselection()[0]) in sub])
+        self.orders2.bind('<Double-1>', lambda event: [[self.map.set_address(sub[2]), self.map.set_zoom(10)] for sub in self.all if self.orders2.get(self.orders2.curselection()[0]) == sub[0]])
         mode = Button(self.root2, command=lambda: self.change_map_mode(mode), text='Satellite' if mode == 'Normal' else 'Normal', font=('Helvetica', 11),
                              cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
                              activeforeground='#252221')
@@ -419,14 +428,19 @@ class Admin:
         marker_tk.config(bg='#252221')
         f = ('Helvetica', 14)
         right_frame = Frame(marker_tk, bd=2, bg='#CCCCCC', padx=10, pady=10)
-        Label(right_frame, text="Location", bg='#CCCCCC', font=f).grid(row=0, column=0, sticky=W, pady=10)
+        Label(right_frame, text="Name", bg='#CCCCCC', font=f).grid(row=0, column=0, sticky=W, pady=10)
+        Label(right_frame, text="Location", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
+        Label(right_frame, text="Radius", bg='#CCCCCC', font=f).grid(row=2, column=0, sticky=W, pady=10)
+
         Button(right_frame, text="Choose image", command=lambda: self.addfile(marker_tk), font=f, bg='#252221', fg='lightgray',
                cursor='hand2',
-               activebackground='lightgray', activeforeground='#252221').grid(row=1, column=0, sticky=W, pady=10)
-        name = Label(right_frame, text=f"{coords}\n{tkintermapview.convert_coordinates_to_address(coords[0], coords[1])[0]}", bg='#CCCCCC', font=f)
+               activebackground='lightgray', activeforeground='#252221').grid(row=3, column=0, sticky=W, pady=10)
+        location = Label(right_frame, text=f"{coords}\n{tkintermapview.convert_coordinates_to_city(float(coords[0]), float(coords[1]))}", bg='#CCCCCC', font=f)
+        name = Entry(right_frame, font=f)
+        radius = Entry(right_frame, font=f)
         self.message = Label(marker_tk, bg='#252221', font=f)
         submit = Button(right_frame,
-                        command=lambda: self.add_marker_event(coords, marker_tk),
+                        command=lambda: self.add_marker_event(coords, marker_tk, name.get(), radius.get()),
                         width=15, text='Add', font=('Helvetica', 11), cursor='hand2', bg='#252221',
                         fg='lightgray', activebackground='lightgray',
                         activeforeground='#252221')
@@ -434,8 +448,10 @@ class Admin:
                        cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
                        activeforeground='#252221')
         name.grid(row=0, column=1, sticky=W, pady=10)
-        close.grid(row=2, column=1, pady=10, padx=10)
-        submit.grid(row=2, column=0, pady=10, padx=10)
+        location.grid(row=1, column=1, sticky=W, pady=10)
+        radius.grid(row=2, column=1, sticky=W, pady=10)
+        close.grid(row=4, column=1, pady=10, padx=10)
+        submit.grid(row=4, column=0, pady=10, padx=10)
         right_frame.grid()
 
         self.message.grid(row=3, column=0, sticky=W, pady=10)
@@ -446,12 +462,16 @@ class Admin:
         else:
             marker.hide_image(True)
 
-    def add_marker_event(self, coords, marker_tk):
+    def add_marker_event(self, coords, marker_tk, name, radius):
+        try:
+            self.filename
+        except:
+            self.filename = ''
         if self.filename == '':
             self.message.config(text='No image selected', bg='#CCCCCC')
         else:
             shutil.copy(self.filename, f'Attractions_images/{self.filename[self.filename.rfind("/") + 1:]}')
-            self.client.send(f'ATTRACTION {coords[0]} {coords[1]}, {self.filename[self.filename.rfind("/") + 1:]}'.encode())
+            self.client.send(f'ATTRACTION {coords[0]} {coords[1]}. {self.filename[self.filename.rfind("/") + 1:]}. {name}. {radius}'.encode())
             self.sendimage()
             self.filename = ""
             marker_tk.destroy()
@@ -473,18 +493,32 @@ class Admin:
         self.orders2.delete(0, END)
         choice = self.val.get()
         conn = sqlite3.connect('Databases/database.db')
-        if choice == 'Price':
+        if choice == 'Price(ASC.)':
             cursor = conn.execute('SELECT * FROM Offered ORDER BY Price;')
             sort = cursor.fetchall()
             for item in sort:
                 self.orders2.insert(END, item[0])
             conn.close()
-        else:
+        elif choice == 'Price(DESC.)':
+            cursor = conn.execute('SELECT * FROM Offered ORDER BY Price DESC;')
+            sort = cursor.fetchall()
+            for item in sort:
+                self.orders2.insert(END, item[0])
+            conn.close()
+        elif choice == 'Proximity(ASC.)':
             self.close = False
             cursor = conn.execute('SELECT Coordinates FROM Offered;')
             data = cursor.fetchall()
             conn.close()
             _thread.start_new_thread(self.update_on_move, (data,))
+        else:
+            for item in self.all_attractions:
+                if item[0] == choice:
+                    place = item
+                    break
+            for item in self.dict_closeby[place]:
+                if len(item) != 0:
+                    self.orders2.insert(END, item[0])
 
     def update_on_move(self, data):
         last2 = None
@@ -587,6 +621,19 @@ class Admin:
 
     def reset_root3(self):
         self.root3 = None
+
+    def check_radius(self, point, attraction):
+        coords = attraction[1].split(' ')
+        point_coords = point[2].split(' ')
+        point_coords[0], point_coords[1] = float(point_coords[0]), float(point_coords[1])
+        coords[0], coords[1] = float(coords[0]), float(coords[1])
+        limitxmax = coords[0] + float(attraction[3])
+        limitxmin = coords[0] - float(attraction[3])
+        limitymax = coords[1] + float(attraction[3])
+        limitymin = coords[1] - float(attraction[3])
+        if limitxmin <= point_coords[0] <= limitxmax and limitymin <= point_coords[1] <= limitymax:
+            return 1
+        return 0
 
     def askroom(self):
         if self.__user[0] == 'Guest':
@@ -691,9 +738,9 @@ class Admin:
         self.root.bind('<Return>', lambda event: [self.loginsend(email.get(), pwd.get(), message)])
         f = ('Helvetica', 14)
         right_frame = Frame(self.root, bd=2, bg='#CCCCCC', padx=10, pady=10)
+        Label(right_frame,width=10, text='Admin Login', bg='#252221', fg='#CCCCCC', font=f).grid(row=0, columnspan=2, sticky='nswe')
         Label(right_frame, text="Email", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
         Label(right_frame, text="Password", bg='#CCCCCC', font=f).grid(row=5, column=0, sticky=W, pady=10)
-
         email = Entry(right_frame, font=f)
         pwd = Entry(right_frame, font=f, show='*')
         message = Label(self.root, bg='#252221', font=f)
@@ -711,7 +758,7 @@ class Admin:
         pwd.grid(row=5, column=1, pady=10, padx=20)
         close.grid(row=7, column=1, pady=10, padx=10)
         login.grid(row=7, column=0, pady=10, padx=10)
-        self.midwin(self.root, 450, 175)
+        self.midwin(self.root, 450, 250)
         self.root.mainloop()
 
     def addroom(self):
@@ -782,19 +829,19 @@ class Admin:
             self.duration = (
             self.duration1.get_date().strftime('%d/%m/%Y'), self.duration2.get_date().strftime('%d/%m/%Y'))
             shutil.copy(self.filename, f'Images/{self.filename[self.filename.rfind("/") + 1:]}')
-            self.filename = ''
             temp = TkinterMapView()
             temp.set_address(self.location.get())
             c = temp.get_position()
             if c != (52.516268, 13.377694999999989):  # non-generic only
                 if self.roomname.get() != '' and self.price.get().isdigit():
                     self.client.send(
-                        f'ADD {self.roomname.get()}, {c[0]} {c[1]},'
-                        f' {int(self.price.get())},'
-                        f' {self.duration[0]}, {self.duration[1]}'
-                        f', {self.__user[0]}, {self.filename[self.filename.rfind("/") + 1:]},'
+                        f'ADD {self.roomname.get()}. {c[0]} {c[1]}.'
+                        f' {int(self.price.get())}.'
+                        f' {self.duration[0]}. {self.duration[1]}'
+                        f', {self.__user[0]}. {self.filename[self.filename.rfind("/") + 1:]}.'
                         f' {self.conditions.get()}'.encode())
                     self.sendimage()
+                    self.filename = ''
                 else:
                     self.message.config(text='values must be valid', bg='#CCCCCC')
                     err = True
@@ -897,6 +944,7 @@ class Admin:
 
     def users_data(self):
         root = Tk()
+        root.bind('<Return>', lambda event: self.search_record(tree, message.get(), 'registered'))
         root.title('users')
         conn = sqlite3.connect('Databases/registered.db')
         all_data = conn.execute('SELECT * FROM Registered').fetchall()
@@ -905,33 +953,66 @@ class Admin:
         columns = ('Fullname', 'Email', 'Country', 'Password', 'Admin')
 
         tree = ttk.Treeview(root, columns=columns, show='headings')
-        tree.grid(row=0, column=0, sticky='nsew')
+        tree.grid(row=1, column=0, sticky='nsew')
 
         # define headings
         tree.heading('Fullname', text='Full Name')
+        tree.column('Fullname', width=20)
         tree.heading('Email', text='Email')
+        tree.column('Email', width=20)
         tree.heading('Country', text='Country')
+        tree.column('Country', width=20)
         tree.heading('Password', text='Password')
+        tree.column('Password', width=20)
         tree.heading('Admin', text='Is Admin')
+        tree.column('Admin', width=20)
 
         tree.bind('<<TreeviewSelect>>', lambda event: self.make_admin(tree, root))
-
+        message = Entry(root, bg='lightgray', fg='#252221',
+                        font=("Helvetica", 15, 'bold'), width=60)
+        message.grid(row=0, column=0, sticky=EW)
+        search = Button(root,
+                       command=lambda: self.search_record(tree, message.get(), 'registered'), text='Search', font=('Helvetica', 11),
+                       cursor='hand2',
+                       bg='#252221', fg='lightgray', activebackground='lightgray',
+                       activeforeground='#252221')
+        search.grid(column=1, row=0, pady=10)
         close = Button(root,
                        command=root.destroy, text='Close', width=15, font=('Helvetica', 11),
                        cursor='hand2',
                        bg='#252221', fg='lightgray', activebackground='lightgray',
                        activeforeground='#252221')
-        close.grid(column=0, row=1, pady=10)
+        close.grid(column=0, row=2, pady=10)
         for data in all_data:
             tree.insert('', END, values=data)
         scrollbar = ttk.Scrollbar(root, orient=VERTICAL, command=tree.yview)
         tree.configure(yscroll=scrollbar.set)
-        scrollbar.grid(row=0, column=1, sticky='ns')
-        self.midwin(root, 1020, 275)
+        scrollbar.grid(row=1, column=1, sticky='nsw')
+        self.midwin(root, 750, 325)
+
+    def search_record(self, tree, record, database):
+        conn = sqlite3.connect(f'Databases/{database}.db')
+        if database == 'registered':
+            all_data = conn.execute('SELECT * FROM Registered WHERE Email="{0}" OR Fullname="{0}" OR Country="{0}" OR Password="{0}" OR Admin="{0}"'.format(record)).fetchall()
+            conn.commit()
+            conn.close()
+            tree.delete(*tree.get_children())
+            for data in all_data:
+                tree.insert('', END, values=data)
+        else:
+            all_data = conn.execute('SELECT * FROM Offered WHERE RoomName="{0}" OR By="{0}" OR Coordinates="{0}"'
+                                    ' OR Price="{0}" OR First="{0}" OR Last="{0}" OR ImagePath="{0}" OR RATING="{0}"'
+                                    ' OR Conditions="{0}"'.format(record)).fetchall()
+            conn.commit()
+            conn.close()
+            tree.delete(*tree.get_children())
+            for data in all_data:
+                tree.insert('', END, values=data)
 
     def make_admin(self, tree, root):
         selected = tree.item(tree.selection())["values"]
-        if selected[4] != 1:
+        print(selected)
+        if selected and selected[4] != 1:
             admin_tk = Tk()
             admin_tk.resizable(None, None)
             admin_tk.config(bg='lightgray')
@@ -947,6 +1028,62 @@ class Admin:
                         activeforeground='#252221', padx=10, cursor='hand2')  # Destroy popup window
             no.pack(pady=10, side=RIGHT)
             self.midwin(admin_tk, 350, 80)  # place window in the center
+
+    def offers_data(self):
+        root = Tk()
+        root.bind('<Return>', lambda event: self.search_record(tree, message.get(), 'database'))
+        root.title('users')
+        conn = sqlite3.connect('Databases/database.db')
+        all_data = conn.execute('SELECT * FROM Offered').fetchall()
+        conn.close()
+        # define columns
+        columns = ('RoomName', 'By', 'Coordinates', 'Price', 'First', 'Last', 'ImagePath', 'RATING', 'Conditions')
+
+        tree = ttk.Treeview(root, columns=columns, show='headings',)
+        tree.grid(row=1, column=0, sticky='nsew')
+
+        # define headings
+        tree.heading('RoomName', text='Room Name')
+        tree.column('RoomName', width=20)
+        tree.heading('By', text='Publisher')
+        tree.column('By', width=20)
+        tree.heading('Coordinates', text='Location')
+        tree.column('Coordinates', width=20)
+        tree.heading('Price', text='Price')
+        tree.column('Price', width=20)
+        tree.heading('First', text='From')
+        tree.column('First', width=20)
+        tree.heading('Last', text='Until')
+        tree.column('Last', width=20)
+        tree.heading('ImagePath', text='Image Path')
+        tree.column('ImagePath', width=20)
+        tree.heading('RATING', text='Rating')
+        tree.column('RATING', width=20)
+        tree.heading('Conditions', text='Conditions')
+        tree.column('Conditions', width=20)
+
+
+        message = Entry(root, bg='lightgray', fg='#252221',
+                        font=("Helvetica", 15, 'bold'), width=60)
+        message.grid(row=0, column=0, sticky=EW)
+        search = Button(root,
+                       command=lambda: self.search_record(tree, message.get(),'database'), text='Search', font=('Helvetica', 11),
+                       cursor='hand2',
+                       bg='#252221', fg='lightgray', activebackground='lightgray',
+                       activeforeground='#252221')
+        search.grid(column=1, row=0, pady=10)
+        close = Button(root,
+                       command=root.destroy, text='Close', width=15, font=('Helvetica', 11),
+                       cursor='hand2',
+                       bg='#252221', fg='lightgray', activebackground='lightgray',
+                       activeforeground='#252221')
+        close.grid(column=0, row=2, pady=10)
+        for data in all_data:
+            tree.insert('', END, values=data)
+        scrollbar = ttk.Scrollbar(root, orient=VERTICAL, command=tree.yview)
+        tree.configure(yscroll=scrollbar.set)
+        scrollbar.grid(row=1, column=1, sticky='nsw')
+        self.midwin(root, 750, 325)
 
 
 if __name__ == '__main__':

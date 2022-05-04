@@ -40,7 +40,7 @@ class Server:
         self.conn = sqlite3.connect('Databases/database.db')
         self.conn.cursor().execute('CREATE TABLE IF NOT EXISTS Offered(RoomName TEXT,By TEXT, Coordinates TEXT,'
                              ' Price INT, First TEXT, Last TEXT, ImagePath TEXT, RATING INT, Conditions TEXT);')
-        self.conn.cursor().execute('CREATE TABLE IF NOT EXISTS Attractions(Coordinates TEXT, ImagePath TEXT);')
+        self.conn.cursor().execute('CREATE TABLE IF NOT EXISTS Attractions(Name TEXT,Coordinates TEXT, ImagePath TEXT, Radius INT);')
         self.conn.close()
         self.lst = os.listdir('Images/')
         self.att_lst = os.listdir('Attractions_images/')
@@ -127,12 +127,12 @@ class Server:
                     except:
                         datacontent = ""
                     if 'ADD' in datacontent:
-                        values = datacontent[4:].split(', ')
+                        values = datacontent[4:].split('. ')
                         self.getfile(sock, values[6])
                         self.addroom(values, sock)
                         _thread.start_new_thread(self.broadcast_files, ())
                     elif 'ATTRACTION' in datacontent:
-                        values = datacontent[11:].split(', ')
+                        values = datacontent[11:].split('. ')
                         print(values)
                         self.get_attraction_file(sock, values[1])
                         self.add_attraction(values)
@@ -146,7 +146,7 @@ class Server:
                             user, ret, specific_order, all_orders = self.loginuser(data, sock, True)
                             if ret is not None:
                                 sock.send(pickle.dumps([ret, user, all_orders]))
-                                if all_orders is not None:
+                                if user[4] == 1:  # is Admin
                                     sock.send('PUSH'.encode())
                                     self.send_database(sock, 'registered')
                                 _thread.start_new_thread(self.user_rate, (ret, sock, specific_order))
@@ -206,7 +206,7 @@ class Server:
                         print(user)
                         self.make_admin(user)
 
-    def make_admin(self,user):
+    def make_admin(self, user):
         conn = sqlite3.connect('Databases/registered.db')
         conn.execute(f'UPDATE Registered SET Admin=1 WHERE Email="{user}"')
         conn.commit()
@@ -217,8 +217,8 @@ class Server:
         conn = sqlite3.connect('Databases/database.db')
         cursor = conn.cursor()
         cursor.execute(
-            'INSERT INTO Attractions (Coordinates, ImagePath) VALUES (?,?)',
-            (values[0], values[1]))
+            'INSERT INTO Attractions (Name, Coordinates, ImagePath, Radius) VALUES (?,?,?,?)',
+            (values[2], values[0], values[1], int(values[3])))
         conn.commit()
         conn.close()
 
@@ -239,6 +239,7 @@ class Server:
             rec = cursor.fetchone()
             rec = list(rec)
             rec[4], rec[5] = i[2], i[3]  # dates purchased by user
+            rec.append(i[1])
             _all.append(rec)
         conn.close()
         for admin in self.admin_dict.values():
@@ -394,9 +395,11 @@ class Server:
     def addroom(self, values, sock):
         conn = sqlite3.connect('Databases/database.db')
         try:
-            cursor = conn.cursor().execute(f'SELECT * FROM Offered WHERE RoomName={values[0]}')
-            sock.send('Exists: Room Name is taken'.encode())
-
+            cursor = conn.cursor().execute(f'SELECT * FROM Offered WHERE RoomName={values[0]}').fetchone()
+            if cursor is not None:
+                sock.send('Exists: Room Name is taken'.encode())
+            else:
+                raise ValueError
         except:
             cursor = conn.cursor()
             cursor.execute(
@@ -404,6 +407,7 @@ class Server:
                 ' Price, First, Last, ImagePath, Conditions) VALUES (?,?,?,?,?,?,?,?)',
                 (values[0], values[5], values[1], values[2], values[3], values[4], values[6], values[7]))
             conn.commit()
+            print('here222222')
         conn.close()
 
     def sendimages(self, sock):

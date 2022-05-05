@@ -42,11 +42,15 @@ class Server:
                              ' Price INT, First TEXT, Last TEXT, ImagePath TEXT, RATING INT, Conditions TEXT);')
         self.conn.cursor().execute('CREATE TABLE IF NOT EXISTS Attractions(Name TEXT,Coordinates TEXT, ImagePath TEXT, Radius INT);')
         self.conn.close()
+        if not os.path.exists('Images/'):
+            os.makedirs('Images/')
+        if not os.path.exists('Attractions_images/'):
+            os.makedirs('Attractions_images/')
         self.lst = os.listdir('Images/')
         self.att_lst = os.listdir('Attractions_images/')
         _thread.start_new_thread(self.current_time, ())
         threading.Thread(target=self.listen).start()
-        print('___SUCCESS___')
+        print('LISTENING ON 50000')
 
     def current_time(self):
         while 1:
@@ -162,7 +166,7 @@ class Server:
                         self.conn2 = sqlite3.connect('Databases/registered.db')
                         self.conn2.cursor().execute('INSERT INTO Bought(RoomName, Buyer, First, Last, TOTAL)  '
                                               'VALUES(?,?,?,?,?)',
-                                       (data[0], data[-1], data[4], data[5], data[-2]))
+                                       (data[0], data[-1], data[4], data[5], data[3]))
                         self.conn2.commit()
                         self.conn2.close()
                         _thread.start_new_thread(self.inform_admins, ())  # inform all admins on room purchase (db content)
@@ -241,10 +245,11 @@ class Server:
         for i in all_orders:
             cursor = conn.cursor().execute(f'SELECT * FROM Offered WHERE RoomName="{i[0]}"')
             rec = cursor.fetchone()
-            rec = list(rec)
-            rec[4], rec[5] = i[2], i[3]  # dates purchased by user
-            rec.append(i[1])
-            _all.append(rec)
+            if rec is not None:
+                rec = list(rec)
+                rec[4], rec[5] = i[2], i[3]  # dates purchased by user
+                rec.append(i[1])
+                _all.append(rec)
         conn.close()
         for admin in self.admin_dict.values():
             admin.send('UPDATE'.encode())
@@ -352,9 +357,11 @@ class Server:
         for i in _all:
             cursor = self.conn.cursor().execute(f'SELECT * FROM Offered WHERE RoomName="{i[0]}"')
             rec = cursor.fetchone()
-            rec = list(rec)
-            rec[4], rec[5] = i[2], i[3]  # dates purchased by user
-            ret.append(rec)
+            if rec is not None:
+                rec = list(rec)
+                rec[4], rec[5] = i[2], i[3]  # dates purchased by user
+                rec[3] = i[5]  # update price to total
+                ret.append(rec)
         self.conn.close()
         if data[4] == 1:  # is admin
             self.conn = sqlite3.connect('Databases/registered.db')
@@ -366,10 +373,12 @@ class Server:
             for i in all_orders:
                 cursor = self.conn.cursor().execute(f'SELECT * FROM Offered WHERE RoomName="{i[0]}"')
                 rec = cursor.fetchone()
-                rec = list(rec)
-                rec[4], rec[5] = i[2], i[3]  # dates purchased by user
-                rec.append(i[1])
-                ret_all.append(rec)
+                if rec is not None:
+                    rec = list(rec)
+                    rec[4], rec[5] = i[2], i[3]  # dates purchased by user
+                    rec[3] = i[5]  # update price to total
+                    rec.append(i[1])
+                    ret_all.append(rec)
         self.conn.close()
         return data, ret, _all, ret_all
 
@@ -415,6 +424,7 @@ class Server:
 
         conn.close()
         _thread.start_new_thread(self.broadcast_files, ())
+
     def sendimages(self, sock):
         for name in self.lst:
             with open(f'Images/{name}', 'rb') as txt:

@@ -31,7 +31,9 @@ file = __file__
 
 class Admin:
     def __init__(self):
+        """Base creation of all essential variables and use of functions"""
         self.servertime = datetime.datetime.today().date()
+        self.world_active = False
         self.client = socket(AF_INET, SOCK_STREAM)
         self.BUF = 2048
         self.ADDR = ('127.0.0.1', 50000)  # where to connect
@@ -39,7 +41,6 @@ class Admin:
         self.client = ssl.wrap_socket(self.client, server_side=False, keyfile='privkey.pem', certfile='certificate.pem')
         self.images = pickle.loads(self.client.recv(self.BUF))
         self.attraction_images = pickle.loads(self.client.recv(self.BUF))
-        self.world_active = False
 
         self.getimage()
         self.recorders = []
@@ -47,10 +48,16 @@ class Admin:
         _thread.start_new_thread(self.listen, ())
         self.__user = ['Guest', None]
         self.__creds = None
+        if not os.path.exists('Images/'):
+            os.makedirs('Images/')
+        if not os.path.exists('Attractions_images/'):
+            os.makedirs('Attractions_images/')
+        self.lst = os.listdir('Images/')
         print('___SUCCESS___')
         self.login()
 
     def get_database(self, name):
+        """get database type file from server"""
         data = self.client.recv(self.BUF)
         img = pickle.loads(data)
         with open(f'Databases/{name}.db', 'wb') as txt:
@@ -62,6 +69,7 @@ class Admin:
                 s += len(data2)
 
     def getimage(self):
+        """get image from server"""
         for name in self.images:
             data = self.client.recv(self.BUF)
             img = pickle.loads(data)
@@ -83,6 +91,7 @@ class Admin:
         self.get_database('database')
 
     def listen(self):
+        """listen to server, all commands sent from server are processed here"""
         while 1:
             data = self.client.recv(self.BUF)
             if not data:
@@ -95,8 +104,7 @@ class Admin:
                     self.attraction_images = pickle.loads((self.client.recv(self.BUF)))
                     self.getimage()
                     if self.world_active:
-                        self.clear(self.root2)
-                        self.worldrooms('Normal', False)
+                        self.update_world_rooms()
                 elif 'Error:' in datacontent or 'Exists:' in datacontent or 'Success:' in datacontent:  # Errors, Successes
                     if 'Success:' in datacontent:
                         tkinter.messagebox.showinfo(message=datacontent)
@@ -119,6 +127,7 @@ class Admin:
                     tkinter.messagebox.showinfo(message='Success')
 
                 elif datacontent == 'DESTROY':
+                    self.clear(self.root3)
                     self.root3.destroy()
                     self.root3 = None
                     tkinter.messagebox.showinfo(message='The room is currently being watched')
@@ -173,7 +182,66 @@ class Admin:
                         self.root.destroy()
                 except: pass
 
+    def update_world_rooms(self):
+        """update world rooms window, used in room creation and attraction being added"""
+        conn = sqlite3.connect('Databases/database.db')
+        cursor = conn.cursor().execute('SELECT * FROM Offered')
+        temp_all = cursor.fetchall()
+        cursor = conn.cursor().execute('SELECT * FROM Attractions')
+        temp_attractions = cursor.fetchall()
+        check_all = self.all
+        check_attractions = self.all_attractions
+        self.all = []
+        self.all_attractions = []
+        for value in temp_all:
+            if value not in check_all:
+                self.all.append(value)
+        for value in temp_attractions:
+            if value not in check_attractions:
+                self.all_attractions.append(value)
+        conn.close()
+        self.dict_closeby = dict.fromkeys(temp_attractions, [])
+        for attraction in temp_attractions:
+            self.dict_closeby[attraction] = []
+        for attraction in temp_attractions:
+            for place in temp_all:
+                if self.check_radius(place, attraction):
+                    self.dict_closeby[attraction].append(place)
+        for row in self.all:
+            self.cord = row[2].split(' ')
+            if len(self.recorders) == 0 or any(row[0] != element[0] for element in
+                                               self.recorders):  # Did the user already buy the room?
+                mindate = row[4].split('/')
+                maxdate = row[5].split('/')
+                mindate = datetime.datetime(int(mindate[2]), int(mindate[1]), int(mindate[0]))
+                maxdate = datetime.datetime(int(maxdate[2]), int(maxdate[1]), int(maxdate[0]))
+                img = ImageTk.PhotoImage(Image.open(f'Images/{row[6]}').resize((150, 150)),
+                                         master=self.root2)
+                self.map.set_marker(float(self.cord[0]), float(self.cord[1]), image=img,
+                                    image_zoom_visibility=(5, 22),
+                                    marker_color_circle="black",
+                                    marker_color_outside="gray40", text=row[0],
+                                    command=lambda row=row, mindate=mindate,
+                                                   maxdate=maxdate: self.askroomtk(row, mindate, maxdate))
+        for row in self.all_attractions:
+            self.cord = row[1].split(' ')
+            img = ImageTk.PhotoImage(Image.open(f'Attractions_images/{row[2]}').resize((150, 150)),
+                                     master=self.root2)
+            marker = self.map.set_marker(float(self.cord[0]), float(self.cord[1]), image=img,
+                                         image_zoom_visibility=(5, 22),
+                                         marker_color_circle="white",
+                                         marker_color_outside="gray40",
+                                         command=lambda here=row: self.marker_interaction(here))
+            marker.hide_image(True)
+        self.options = OptionMenu(self.root2, self.val, *["Price(ASC.)", "Price(DESC.)", "Proximity(ASC.)",
+                                                          *[attraction[0] for attraction in self.dict_closeby.keys()]],
+                                  command=self.display_selected)
+        self.options.grid(row=0, column=1, sticky='new', columnspan=2)
+        self.all_attractions = temp_attractions
+        self.all = temp_all
+
     def purchases(self):
+        """all purchases made"""
         if self.all_orders:
             all_orders_tk = Tk()
             f = ('Helvetica', 12)
@@ -196,6 +264,7 @@ class Admin:
             tkinter.messagebox.showinfo(message='No orders have been placed')
 
     def rating(self, name):
+        """user rates room and sends information to server"""
         rate = Tk()
         rate.config(bg='lightgray')
         lb3 = Label(rate, text=f'How did you like your stay at {name}?', font=("Helvetica", 15), bg='#252221',
@@ -216,11 +285,13 @@ class Admin:
         rate.mainloop()
 
     def rate(self, scale, name):
+        """send rating information to server"""
         self.client.send('RATING'.encode())
         self.client.send(pickle.dumps([scale, name, self.__user[0]]))
         print(f'SENT {scale}')
 
     def orders(self):
+        """all orders made by this user"""
         if len(self.recorders) != 0:
             self.root5 = Tk()
             self.root5.resizable(False, False)
@@ -245,11 +316,12 @@ class Admin:
             tkinter.messagebox.showinfo(message='You have not placed any order')
 
     def details(self, line, root):
+        """full details of a room bought by user"""
         self.root4 = Tk()
         self.root4.config(bg='#252221')
         f = ('Helvetica', 14)
         right_frame = Frame(self.root4, bd=2, bg='#CCCCCC', padx=10, pady=10)
-        Label(right_frame, text="Price", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
+        Label(right_frame, text="Total", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
         Label(right_frame, text="Check-in", bg='#CCCCCC', font=f).grid(row=2, column=0, sticky=W, pady=10)
         Label(right_frame, text="Check-out", bg='#CCCCCC', font=f).grid(row=3, column=0, sticky=W, pady=10)
         Label(right_frame, text="Where", bg='#CCCCCC', font=f).grid(row=4, column=0, sticky=W, pady=10)
@@ -294,6 +366,7 @@ class Admin:
         self.root4.mainloop()
 
     def cancel(self, line):
+        """Cancels bought room, contacts server informing it"""
         if line is self.recorders:
             self.recorders.remove(line)
         line = list(line)
@@ -302,6 +375,7 @@ class Admin:
         self.client.send(pickle.dumps(line))
 
     def main(self):
+        """main screen, all functions lead from here on"""
         self.root.bind('<Return>', lambda event: None)
         self.root.grid_columnconfigure(2, weight=1)
         self.root.grid_rowconfigure(1, weight=1)
@@ -341,17 +415,21 @@ class Admin:
         self.root.geometry('900x500')
 
     def searchplace(self, *args):
+        """search engine, (used in worldrooms function) aims to find user's queried place there"""
         self.map.set_address(self.message.get())
         self.message.delete(0, END)
 
     def clear(self, root):
+        """Clears all widgets inside of a root"""
         for widget in root.winfo_children():
             widget.destroy()
 
     def worldrooms(self, mode, flag):
+        """Map of the world showing all locations added and ready / not ready for purchase"""
         self.world_active = True
         if flag:
             self.root2 = Toplevel()
+            self.root2.protocol("WM_DELETE_WINDOW", self.close_map)
         self.root2.grid_columnconfigure(0, weight=1)
         self.root2.grid_columnconfigure(1, weight=1)
         self.root2.grid_rowconfigure(0, weight=1)
@@ -375,7 +453,6 @@ class Admin:
         cursor = conn.cursor().execute('SELECT * FROM Attractions')
         self.all_attractions = cursor.fetchall()
         conn.close()
-        self.dict_closeby = {}
         self.dict_closeby = dict.fromkeys(self.all_attractions, [])
         for attraction in self.all_attractions:
             self.dict_closeby[attraction] = []
@@ -428,10 +505,12 @@ class Admin:
         self.root2.mainloop()
 
     def close_map(self):
+        """closes the map and updates world activeness"""
         self.world_active = False
         self.root2.destroy()
 
     def add_marker_event_tk(self, coords):
+        """add attraction window"""
         marker_tk = Toplevel()
         marker_tk.config(bg='#252221')
         f = ('Helvetica', 14)
@@ -465,12 +544,14 @@ class Admin:
         self.message.grid(row=3, column=0, sticky=W, pady=10)
 
     def marker_interaction(self, marker):
+        """show attraction image on click"""
         if marker.image_hidden is True:
             marker.hide_image(False)
         else:
             marker.hide_image(True)
 
     def add_marker_event(self, coords, marker_tk, name, radius):
+        """update server on attraction details"""
         try:
             self.filename
         except:
@@ -485,6 +566,7 @@ class Admin:
             marker_tk.destroy()
 
     def change_map_mode(self, mode):
+        """change the map mode to Sattellite or to Normal map"""
         if mode.cget('text') == "Satellite":
             self.clear(self.root2)
             self.worldrooms("Satellite", False)
@@ -493,10 +575,12 @@ class Admin:
             self.worldrooms("Normal", False)
 
     def distance(self, a):
+        """distance between 2 points, used in proximity"""
         current = self.map.get_position()
         return math.sqrt((float(a[0]) - current[0]) ** 2 + (float(a[1])-current[1]) ** 2)
 
     def display_selected(self, choice):
+        """builds all rooms according to choice given by Option menu"""
         self.close = True
         self.orders2.delete(0, END)
         choice = self.val.get()
@@ -529,6 +613,7 @@ class Admin:
                     self.orders2.insert(END, item[0])
 
     def update_on_move(self, data):
+        """updates the Option menu on user movement"""
         last2 = None
         while 1:
             if self.close:
@@ -547,6 +632,7 @@ class Admin:
             time.sleep(1)
 
     def askroomtk(self, row, mindate, maxdate):
+        """user's desired room details window"""
         try:
             self.root3
         except:
@@ -620,13 +706,16 @@ class Admin:
             self.root3.mainloop()
 
     def removeinst(self, row):
+        """remove instance of a room occupied by user"""
         self.client.send('REM'.encode())
         self.client.send(pickle.dumps(row))
 
     def reset_root3(self):
+        """root is set to None to not allow the user to press on any other marker other than current one"""
         self.root3 = None
 
     def check_radius(self, point, attraction):
+        """check if a give point is in radius of attraction"""
         coords = attraction[1].split(' ')
         point_coords = point[2].split(' ')
         point_coords[0], point_coords[1] = float(point_coords[0]), float(point_coords[1])
@@ -640,6 +729,7 @@ class Admin:
         return 0
 
     def askroom(self):
+        """Informs server of desired room purchase"""
         if self.__user[0] == 'Guest':
             self.guestmail()
         elif self.duration1.get_date() < self.duration2.get_date():
@@ -647,6 +737,7 @@ class Admin:
             self.client.send(pickle.dumps((self.row, self.duration1.get_date(), self.duration2.get_date())))
 
     def guestmail(self):
+        """guest's information"""
         self.marker_tk = Tk()
         self.marker_tk.config(bg='#252221')
         f = ('Helvetica', 14)
@@ -668,6 +759,7 @@ class Admin:
         self.midwin(self.marker_tk, 500, 250)
 
     def submitguestname(self, mail):
+        """sets user mail to guest's mail"""
         self.__user[0] = mail
         self.marker_tk.destroy()
         self.askroom()

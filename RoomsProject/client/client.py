@@ -31,6 +31,7 @@ file = __file__
 class Client:
     def __init__(self):
         self.servertime = datetime.datetime.today().date()
+        self.world_active = False
         self.client = socket(AF_INET, SOCK_STREAM)
         self.BUF = 2048
         self.ADDR = ('127.0.0.1', 50000)  # where to connect
@@ -44,6 +45,11 @@ class Client:
         _thread.start_new_thread(self.listen, ())
         self.__user = ['Guest', None]
         self.__creds = None
+        if not os.path.exists('Images/'):
+            os.makedirs('Images/')
+        if not os.path.exists('Attractions_images/'):
+            os.makedirs('Attractions_images/')
+        self.lst = os.listdir('Images/')
         print('___SUCCESS___')
         self.main()
 
@@ -81,7 +87,10 @@ class Client:
 
     def listen(self):
         while 1:
-            data = self.client.recv(self.BUF)
+            try:
+                data = self.client.recv(self.BUF)
+            except:
+                break
             if not data:
                 break
             try:
@@ -90,6 +99,8 @@ class Client:
                     self.images = pickle.loads(self.client.recv(self.BUF))
                     self.attraction_images = pickle.loads((self.client.recv(self.BUF)))
                     self.getimage()
+                    if self.world_active:
+                        self.update_world_rooms()
                 elif 'Error:' in datacontent or 'Exists:' in datacontent or 'Success:' in datacontent:  # Errors, Successes
                     if 'Success:' in datacontent:
                         tkinter.messagebox.showinfo(message=datacontent)
@@ -109,6 +120,7 @@ class Client:
                     self.user1.config(text=f'Welcome,\n{self.__user[0]}')
                     tkinter.messagebox.showinfo(message='Success')
                 elif datacontent == 'DESTROY':
+                    self.clear(self.root3)
                     self.root3.destroy()
                     self.root3 = None
                     tkinter.messagebox.showinfo(message='The room is currently being watched')
@@ -134,6 +146,65 @@ class Client:
                 except:
                     tkinter.messagebox.showinfo(message='Please use Admin interface')
                     self.root.destroy()
+        os._exit(0)
+
+    def update_world_rooms(self):
+        conn = sqlite3.connect('Databases/database.db')
+        cursor = conn.cursor().execute('SELECT * FROM Offered')
+        temp_all = cursor.fetchall()
+        cursor = conn.cursor().execute('SELECT * FROM Attractions')
+        temp_attractions = cursor.fetchall()
+        check_all = self.all
+        check_attractions = self.all_attractions
+        self.all = []
+        self.all_attractions = []
+        for value in temp_all:
+            if value not in check_all:
+                self.all.append(value)
+        for value in temp_attractions:
+            if value not in check_attractions:
+                self.all_attractions.append(value)
+        conn.close()
+        self.dict_closeby = dict.fromkeys(temp_attractions, [])
+        for attraction in temp_attractions:
+            self.dict_closeby[attraction] = []
+
+        for attraction in temp_attractions:
+            for place in temp_all:
+                if self.check_radius(place, attraction):
+                    self.dict_closeby[attraction].append(place)
+        for row in self.all:
+            self.cord = row[2].split(' ')
+            if len(self.recorders) == 0 or any(row[0] != element[0] for element in
+                                               self.recorders):  # Did the user already buy the room?
+                mindate = row[4].split('/')
+                maxdate = row[5].split('/')
+                mindate = datetime.datetime(int(mindate[2]), int(mindate[1]), int(mindate[0]))
+                maxdate = datetime.datetime(int(maxdate[2]), int(maxdate[1]), int(maxdate[0]))
+                img = ImageTk.PhotoImage(Image.open(f'Images/{row[6]}').resize((150, 150)),
+                                         master=self.root2)
+                self.map.set_marker(float(self.cord[0]), float(self.cord[1]), image=img,
+                                    image_zoom_visibility=(5, 22),
+                                    marker_color_circle="black",
+                                    marker_color_outside="gray40", text=row[0],
+                                    command=lambda row=row, mindate=mindate,
+                                                   maxdate=maxdate: self.askroomtk(row, mindate, maxdate))
+        for row in self.all_attractions:
+            self.cord = row[1].split(' ')
+            img = ImageTk.PhotoImage(Image.open(f'Attractions_images/{row[2]}').resize((150, 150)),
+                                     master=self.root2)
+            marker = self.map.set_marker(float(self.cord[0]), float(self.cord[1]), image=img,
+                                         image_zoom_visibility=(5, 22),
+                                         marker_color_circle="white",
+                                         marker_color_outside="gray40",
+                                         command=lambda here=row: self.marker_interaction(here))
+            marker.hide_image(True)
+        self.options = OptionMenu(self.root2, self.val, *["Price(ASC.)", "Price(DESC.)", "Proximity(ASC.)",
+                                                          *[attraction[0] for attraction in self.dict_closeby.keys()]],
+                                  command=self.display_selected)
+        self.options.grid(row=0, column=1, sticky='new', columnspan=2)
+        self.all_attractions = temp_attractions
+        self.all = temp_all
 
     def rating(self, name):
         rate = Tk()
@@ -189,7 +260,7 @@ class Client:
         self.root4.config(bg='#252221')
         f = ('Helvetica', 14)
         right_frame = Frame(self.root4, bd=2, bg='#CCCCCC', padx=10, pady=10)
-        Label(right_frame, text="Price", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
+        Label(right_frame, text="Total", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
         Label(right_frame, text="Check-in", bg='#CCCCCC', font=f).grid(row=2, column=0, sticky=W, pady=10)
         Label(right_frame, text="Check-out", bg='#CCCCCC', font=f).grid(row=3, column=0, sticky=W, pady=10)
         Label(right_frame, text="Where", bg='#CCCCCC', font=f).grid(row=4, column=0, sticky=W, pady=10)
@@ -292,8 +363,9 @@ class Client:
     def worldrooms(self, mode, flag):
         """Map of the world showing all locations added and ready / not ready for purchase"""
         self.world_active = True
-        if flag:
+        if flag:  # should a new window be opened?
             self.root2 = Toplevel()
+            self.root2.protocol("WM_DELETE_WINDOW", self.close_map)
         self.root2.grid_columnconfigure(0, weight=1)
         self.root2.grid_columnconfigure(1, weight=1)
         self.root2.grid_rowconfigure(0, weight=1)
@@ -314,7 +386,6 @@ class Client:
         cursor = conn.cursor().execute('SELECT * FROM Attractions')
         self.all_attractions = cursor.fetchall()
         conn.close()
-        self.dict_closeby = {}
         self.dict_closeby = dict.fromkeys(self.all_attractions, [])
         for attraction in self.all_attractions:
             self.dict_closeby[attraction] = []
@@ -324,17 +395,19 @@ class Client:
                     self.dict_closeby[attraction].append(place)
         for row in self.all:
             self.cord = row[2].split(' ')
-            if len(self.recorders) == 0 or any(row[0] != element[0] for element in self.recorders):  # Did the user already buy the room?
-                mindate = row[4].split('/')
-                maxdate = row[5].split('/')
-                mindate = datetime.datetime(int(mindate[2]), int(mindate[1]), int(mindate[0]))
-                maxdate = datetime.datetime(int(maxdate[2]), int(maxdate[1]), int(maxdate[0]))
-                img = ImageTk.PhotoImage(Image.open(f'Images/{row[6]}').resize((150, 150)), master=self.root2)
-                self.map.set_marker(float(self.cord[0]), float(self.cord[1]), image=img,
-                                    image_zoom_visibility=(5, 22),
-                                    marker_color_circle="black",
-                                    marker_color_outside="gray40", text=row[0],
-                                    command=lambda row=row, mindate=mindate, maxdate=maxdate: self.askroomtk(row, mindate, maxdate))
+            try:
+                if not any(row[0] == element[0] for element in self.recorders):  # Did the user already buy the room?
+                    mindate = row[4].split('/')
+                    maxdate = row[5].split('/')
+                    mindate = datetime.datetime(int(mindate[2]), int(mindate[1]), int(mindate[0]))
+                    maxdate = datetime.datetime(int(maxdate[2]), int(maxdate[1]), int(maxdate[0]))
+                    img = ImageTk.PhotoImage(Image.open(f'Images/{row[6]}').resize((150, 150)), master=self.root2)
+                    self.map.set_marker(float(self.cord[0]), float(self.cord[1]), image=img,
+                                        image_zoom_visibility=(5, 22),
+                                        marker_color_circle="black",
+                                        marker_color_outside="gray40", text=row[0],
+                                        command=lambda row=row, mindate=mindate, maxdate=maxdate: self.askroomtk(row, mindate, maxdate))
+            except: pass  # len of self.recorders is probably 0
         for row in self.all_attractions:
             self.cord = row[1].split(' ')
             img = ImageTk.PhotoImage(Image.open(f'Attractions_images/{row[2]}').resize((150, 150)), master=self.root2)
@@ -344,8 +417,8 @@ class Client:
                                 marker_color_outside="gray40", command=lambda here=row: self.marker_interaction(here))
             marker.hide_image(True)
 
-        options = OptionMenu(self.root2, self.val, *["Price(ASC.)", "Price(DESC.)", "Proximity(ASC.)", *[attraction[0] for attraction in self.dict_closeby.keys()]], command=self.display_selected)
-        options.grid(row=0, column=1, sticky='new', columnspan=2)
+        self.options = OptionMenu(self.root2, self.val, *["Price(ASC.)", "Price(DESC.)", "Proximity(ASC.)", *[attraction[0] for attraction in self.dict_closeby.keys()]], command=self.display_selected)
+        self.options.grid(row=0, column=1, sticky='new', columnspan=2)
         self.orders2 = Listbox(self.root2, font=('Helvetica', 12), bg='#CCCCCC')
         self.orders2.grid(row=0, column=1, columnspan=2,sticky='nsew', pady=30)
         self.orders2.bind('<Double-1>', lambda event: [[self.map.set_address(sub[2]), self.map.set_zoom(10)]
@@ -764,7 +837,7 @@ class Client:
                 self.message.config(text='Invalid place', bg='#CCCCCC')
 
         else:
-            self.message.config(text='Guests cannot add rooms', bg='#CCCCCC')
+            self.message.configure(text='Guests cannot add rooms', bg='#CCCCCC')
 
     def purchase_screen(self, total):
         root7 = Toplevel()
@@ -773,25 +846,26 @@ class Client:
         right_frame3 = Frame(root7, bd=2, bg='#CCCCCC', padx=10, pady=10)
         Label(right_frame3, text="Total", bg='#CCCCCC', font=f).grid(row=0, column=0, sticky=W, pady=10)
         # Label(right_frame3, text="Credit Card", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
-        total = Label(right_frame3, text=f'{total}₪', font=f, bg='#CCCCCC')
+        total_label = Label(right_frame3, text=f'{total}₪', font=f, bg='#CCCCCC')
         # name = Entry(right_frame3, font=f)
         submit = Button(right_frame3,
-                        command=lambda: self.commit_purchase(root7),
+                        command=lambda: self.commit_purchase(root7, total),
                         width=15, text='Submit', font=('Helvetica', 11), cursor='hand2', bg='#252221',
                         fg='lightgray', activebackground='lightgray',
                         activeforeground='#252221')
         close = Button(right_frame3, command=root7.destroy, text='Close', width=15, font=('Helvetica', 11),
                        cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
                        activeforeground='#252221')
-        total.grid(row=0, column=1, pady=10, padx=20)
+        total_label.grid(row=0, column=1, pady=10, padx=20)
         # name.grid(row=1, column=1, pady=10, padx=20)
         close.grid(row=1, column=1, pady=10, padx=10)
         submit.grid(row=1, column=0, pady=10, padx=10)
         right_frame3.pack()
         self.midwin(root7, 500, 200)
 
-    def commit_purchase(self, root7):
+    def commit_purchase(self, root7, total):
         row = list(self.row)
+        row[3] = total
         self.recorders.append(row)
         row[4], row[5] = self.duration1.get_date().strftime(
             '%d/%m/%Y'), self.duration2.get_date().strftime('%d/%m/%Y')

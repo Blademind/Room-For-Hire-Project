@@ -96,8 +96,11 @@ class Admin:
                     if self.world_active:
                         self.clear(self.root2)
                         self.worldrooms('Normal', False)
-                elif 'Error:' in datacontent or 'Exists:' in datacontent:
-                    tkinter.messagebox.showerror(message=datacontent)
+                elif 'Error:' in datacontent or 'Exists:' in datacontent or 'Success:' in datacontent:  # Errors, Successes
+                    if 'Success:' in datacontent:
+                        tkinter.messagebox.showinfo(message=datacontent)
+                    else:
+                        tkinter.messagebox.showerror(message=datacontent)
                 elif 'Success' in datacontent:
                     self.__user[0] = data.decode()[8:]
                     self.__user[1] = self.__attempt
@@ -112,6 +115,8 @@ class Admin:
                     self.recent.grid(column=2, row=0, sticky=W)
 
                     self.user1.config(text=f'Welcome,\n{self.__user[0]}')
+                    tkinter.messagebox.showinfo(message='Success')
+
                 elif datacontent == 'DESTROY':
                     self.root3.destroy()
                     self.root3 = None
@@ -128,13 +133,12 @@ class Admin:
                     self.all_orders = pickle.loads(self.client.recv(self.BUF))
                 elif datacontent == 'PUSH':
                     self.get_database('registered')
-
             except Exception as e:
                 try:
                     if type(pickle.loads(data)[0]) is bool:
-                        if pickle.loads(data)[0]:  # if passed
+                        if pickle.loads(data)[0] == True:  # if passed (not simplified so it wouldn't catch a list)
                             self.purchase_screen(pickle.loads(data)[1])  # (total)
-                        else:
+                        elif not pickle.loads(data)[0]:
                             tkinter.messagebox.showinfo(message='The selected date is taken')
                             self.removeinst(self.row)
                     elif pickle.loads(data)[1][4] == 1:
@@ -162,7 +166,6 @@ class Admin:
                                              bg='#252221', fg='lightgray', activebackground='lightgray',
                                              activeforeground='#252221').grid(row=2, column=5, sticky='e')
 
-
                     else:
                         self.root.withdraw()
                         tkinter.messagebox.showerror(message='Not an admin')
@@ -172,9 +175,10 @@ class Admin:
     def purchases(self):
         if self.all_orders:
             all_orders_tk = Tk()
-            orders1 = Listbox(all_orders_tk, font=('Helvetica', 12), bg='#CCCCCC')
+            f = ('Helvetica', 12)
+            Label(all_orders_tk, text='Room Name', font=f, bg='#252221', fg='lightgray').grid(sticky=NSEW)
+            orders1 = Listbox(all_orders_tk, font=f, bg='#CCCCCC')
             for row in self.all_orders:
-                print(row)
                 orders1.insert(END, row[0])
             orders1.grid()
             close = Button(all_orders_tk,
@@ -218,7 +222,9 @@ class Admin:
     def orders(self):
         if len(self.recorders) != 0:
             self.root5 = Tk()
-            orders1 = Listbox(self.root5, font=('Helvetica', 12), bg='#CCCCCC')
+            f = ('Helvetica', 12)
+            Label(self.root5, text='Room Name', font=f, bg='#252221', fg='lightgray').grid(sticky=NSEW)
+            orders1 = Listbox(self.root5, font=f, bg='#CCCCCC')
             for row in self.recorders:
                 orders1.insert(END, row[0])
             orders1.grid()
@@ -237,6 +243,7 @@ class Admin:
             tkinter.messagebox.showinfo(message='You have not placed any order')
 
     def details(self, line, root):
+        print(line)
         self.root4 = Tk()
         self.root4.config(bg='#252221')
         f = ('Helvetica', 14)
@@ -251,7 +258,7 @@ class Admin:
         when = Label(right_frame, text=f'{line[4]}', font=f, bg='#CCCCCC')
         until = Label(right_frame, text=f'{line[5]}', font=f, bg='#CCCCCC')
         try:
-            buyer = Label(right_frame, text=f'{line[9]}', font=f, bg='#CCCCCC')  # last line added by server (buyer)
+            buyer = Label(right_frame, text=f'{line[-1]}', font=f, bg='#CCCCCC')  # last line added by server (buyer)
             Label(right_frame, text="Buyer", bg='#CCCCCC', font=f).grid(row=6, column=0, sticky=W, pady=10)
             buyer.grid(row=6, column=1, pady=10, padx=20)
         except: pass
@@ -276,7 +283,7 @@ class Admin:
         if t.date() > self.servertime:
             cancel = Button(right_frame,
                             command=lambda: [self.cancel(line), self.root4.destroy(), root.destroy(),
-                                             self.purchases()],
+                                             tkinter.messagebox.showinfo(message='Cancelled')],
                             text='Cancel', width=15, font=('Helvetica', 11), cursor='hand2',
                             bg='#252221', fg='lightgray', activebackground='lightgray',
                             activeforeground='#252221')
@@ -562,12 +569,10 @@ class Admin:
             panel.grid(row=3, rowspan=3, column=0, padx=10)
             Label(right_frame, text="Price (per night)", bg='#CCCCCC', font=f).grid(row=1, column=1, sticky=W, pady=10)
             Label(right_frame, text="Conditions", bg='#CCCCCC', font=f).grid(row=2, column=1, sticky=W, pady=10)
-            Label(right_frame, text="From", bg='#CCCCCC', font=f).grid(row=3, column=1, sticky=W, pady=10)
-            Label(right_frame, text="Until", bg='#CCCCCC', font=f).grid(row=4, column=1, sticky=W, pady=10)
-            Label(right_frame, text="Check-in", bg='#CCCCCC', font=f).grid(row=5, column=1, sticky=W, pady=10)
-            Label(right_frame, text="Check-out", bg='#CCCCCC', font=f).grid(row=6, column=1, sticky=W, pady=10)
-            Label(right_frame, text="Where", bg='#CCCCCC', font=f).grid(row=7, column=1, sticky=W, pady=10)
-            Label(right_frame, text="Recipient", bg='#CCCCCC', font=f).grid(row=8, column=1, sticky=W, pady=10)
+            Label(right_frame, text="Check-in", bg='#CCCCCC', font=f).grid(row=3, column=1, sticky=W, pady=10)
+            Label(right_frame, text="Check-out", bg='#CCCCCC', font=f).grid(row=4, column=1, sticky=W, pady=10)
+            Label(right_frame, text="Where", bg='#CCCCCC', font=f).grid(row=5, column=1, sticky=W, pady=10)
+            Label(right_frame, text="Recipient", bg='#CCCCCC', font=f).grid(row=6, column=1, sticky=W, pady=10)
 
             cord = self.row[2].split(' ')
             conditions = Label(right_frame, text=f'{self.row[8]}', font=f, bg='#CCCCCC')
@@ -575,9 +580,9 @@ class Admin:
             when = Label(right_frame, text=f'{self.row[4]}', font=f, bg='#CCCCCC')
             until = Label(right_frame, text=f'{self.row[5]}', font=f, bg='#CCCCCC')
             if self.row[-2] is not None:
-                Label(right_frame, text="Rating", bg='#CCCCCC', font=f).grid(row=9, column=1, sticky=W, pady=10)
+                Label(right_frame, text="Rating", bg='#CCCCCC', font=f).grid(row=7, column=1, sticky=W, pady=10)
                 rating = Label(right_frame, text=f'{self.row[-2]} / 10', font=f, bg='#CCCCCC')
-                rating.grid(row=9, column=2, pady=10, padx=20)
+                rating.grid(row=7, column=2, pady=10, padx=20)
             self.where = Label(right_frame, text=f'{tkintermapview.convert_coordinates_to_address(float(cord[0]), float(cord[1])).street}',
                                font=f,
                                bg='#CCCCCC')
@@ -587,9 +592,9 @@ class Admin:
                                activeforeground='#252221')
             self.timer.grid(column=8, row=0, sticky=E)
             self.duration1 = DateEntry(right_frame, font=f, locale='en_IL', date_pattern='dd/mm/yyyy',
-                                       mindate=mindate, maxdate=maxdate, showweeknumbers=0)
+                                       mindate=mindate if mindate > datetime.datetime.today() else datetime.datetime.today(), maxdate=maxdate, showweeknumbers=0)
             self.duration2 = DateEntry(right_frame, font=f, locale='en_IL', date_pattern='dd/mm/yyyy',
-                                       mindate=mindate, maxdate=maxdate, showweeknumbers=0)
+                                       mindate=mindate if mindate > datetime.datetime.today() else datetime.datetime.today(), maxdate=maxdate, showweeknumbers=0)
             proceed = Button(right_frame,
                              width=15, text='Proceed', command=self.askroom, font=('Helvetica', 11), cursor='hand2',
                              bg='#252221', fg='lightgray',
@@ -603,14 +608,12 @@ class Admin:
                            activeforeground='#252221')
             price.grid(row=1, column=2, pady=10, padx=20)
             conditions.grid(row=2, column=2, pady=10, padx=20)
-            when.grid(row=3, column=2, pady=10, padx=20)
-            until.grid(row=4, column=2, pady=10, padx=20)
-            self.duration1.grid(row=5, column=2, pady=10)
-            self.duration2.grid(row=6, column=2, pady=10)
-            self.where.grid(row=7, column=2, pady=10, padx=20)
-            self.recipient.grid(row=8, column=2, pady=10, padx=20)
-            close.grid(row=10, column=2, pady=10, padx=10)
-            proceed.grid(row=10, column=1, pady=10, padx=10)
+            self.duration1.grid(row=3, column=2, pady=10)
+            self.duration2.grid(row=4, column=2, pady=10)
+            self.where.grid(row=5, column=2, pady=10, padx=20)
+            self.recipient.grid(row=6, column=2, pady=10, padx=20)
+            close.grid(row=8, column=2, pady=10, padx=10)
+            proceed.grid(row=8, column=1, pady=10, padx=10)
             right_frame.grid()
             self.update_clock(60)
             self.root3.mainloop()
@@ -762,6 +765,7 @@ class Admin:
         self.root.mainloop()
 
     def addroom(self):
+        """ Allows user to add a room """
         self.roomroot = Tk()
         self.roomroot.config(bg='#252221')
         f = ('Helvetica', 14)
@@ -816,6 +820,7 @@ class Admin:
         root.attributes('-topmost', True)
 
     def addsend(self):
+        """ sends added room data to server """
         err = False
         try:
             self.filename
@@ -838,7 +843,7 @@ class Admin:
                         f'ADD {self.roomname.get()}. {c[0]} {c[1]}.'
                         f' {int(self.price.get())}.'
                         f' {self.duration[0]}. {self.duration[1]}'
-                        f', {self.__user[0]}. {self.filename[self.filename.rfind("/") + 1:]}.'
+                        f'. {self.__user[0]}. {self.filename[self.filename.rfind("/") + 1:]}.'
                         f' {self.conditions.get()}'.encode())
                     self.sendimage()
                     self.filename = ''
@@ -856,27 +861,27 @@ class Admin:
         f = ('Helvetica', 14)
         right_frame3 = Frame(root7, bd=2, bg='#CCCCCC', padx=10, pady=10)
         Label(right_frame3, text="Total", bg='#CCCCCC', font=f).grid(row=0, column=0, sticky=W, pady=10)
-        Label(right_frame3, text="Credit Card", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
-        total = Label(right_frame3, text=f'{total}₪', font=f, bg='#CCCCCC')
-        name = Entry(right_frame3, font=f)
+        # Label(right_frame3, text="Credit Card", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
+        total_label = Label(right_frame3, text=f'{total}₪', font=f, bg='#CCCCCC')
+        # name = Entry(right_frame3, font=f)
         submit = Button(right_frame3,
-                        command=lambda: self.commit_purchase(root7),
+                        command=lambda: self.commit_purchase(root7, total),
                         width=15, text='Submit', font=('Helvetica', 11), cursor='hand2', bg='#252221',
                         fg='lightgray', activebackground='lightgray',
                         activeforeground='#252221')
         close = Button(right_frame3, command=root7.destroy, text='Close', width=15, font=('Helvetica', 11),
                        cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
                        activeforeground='#252221')
-        total.grid(row=0, column=1, pady=10, padx=20)
-        name.grid(row=1, column=1, pady=10, padx=20)
-        close.grid(row=2, column=1, pady=10, padx=10)
-        submit.grid(row=2, column=0, pady=10, padx=10)
+        total_label.grid(row=0, column=1, pady=10, padx=20)
+        # name.grid(row=1, column=1, pady=10, padx=20)
+        close.grid(row=1, column=1, pady=10, padx=10)
+        submit.grid(row=1, column=0, pady=10, padx=10)
         right_frame3.pack()
-        self.midwin(root7, 500, 250)
 
-    def commit_purchase(self, root7):
+    def commit_purchase(self, root7, total):
         """Sends purchase query"""
         row = list(self.row)
+        row.append(total)
         self.recorders.append(row)
         row[4], row[5] = self.duration1.get_date().strftime(
             '%d/%m/%Y'), self.duration2.get_date().strftime('%d/%m/%Y')
@@ -888,6 +893,7 @@ class Admin:
         self.reset_root3()
         self.removeinst(self.row)
         self.row = None
+        tkinter.messagebox.showinfo(message='Room bought')
 
     def loginsend(self, email, pwd, message):
         """Sends to server the user's credentials, logs in attempt"""

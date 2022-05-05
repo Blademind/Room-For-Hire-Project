@@ -35,7 +35,7 @@ class Server:
         self.conn.cursor().execute('CREATE TABLE IF NOT EXISTS Registered(Fullname TEXT, Email TEXT,'
                             ' Country TEXT, Password TEXT, Admin BIT);')
         self.conn.cursor().execute('CREATE TABLE IF NOT EXISTS Bought(RoomName TEXT, '
-                             'Buyer TEXT, First TEXT, Last TEXT, RATING INT);')
+                             'Buyer TEXT, First TEXT, Last TEXT, RATING INT, TOTAL INT);')
         self.conn.close()
         self.conn = sqlite3.connect('Databases/database.db')
         self.conn.cursor().execute('CREATE TABLE IF NOT EXISTS Offered(RoomName TEXT,By TEXT, Coordinates TEXT,'
@@ -151,12 +151,12 @@ class Server:
                                     self.send_database(sock, 'registered')
                                 _thread.start_new_thread(self.user_rate, (ret, sock, specific_order))
                     elif datacontent == 'BUY':
-                        data = sock.recv(self.BUF)
-                        data = pickle.loads(data)
+                        data = pickle.loads(sock.recv(self.BUF))
+                        print(data)
                         self.conn2 = sqlite3.connect('Databases/registered.db')
-                        self.conn2.cursor().execute('INSERT INTO Bought(RoomName, Buyer, First, Last)  '
-                                              'VALUES(?,?,?,?)',
-                                       (data[0], data[-1], data[4], data[5]))
+                        self.conn2.cursor().execute('INSERT INTO Bought(RoomName, Buyer, First, Last, TOTAL)  '
+                                              'VALUES(?,?,?,?,?)',
+                                       (data[0], data[-1], data[4], data[5], data[-2]))
                         self.conn2.commit()
                         self.conn2.close()
                         _thread.start_new_thread(self.inform_admins, ())  # inform all admins on room purchase (db content)
@@ -256,9 +256,7 @@ class Server:
         flag = True
         for date in dates:
             s = datetime.datetime.strptime(date[0], '%d/%m/%Y')
-            print(s)
             f = datetime.datetime.strptime(date[1], '%d/%m/%Y')
-            print(f)
             while s <= f:
                 final_dates1.append(s.date())
                 s += datetime.timedelta(days=1)
@@ -329,6 +327,7 @@ class Server:
             self.conn.close()
 
     def loginuser(self, cred, sock, flag):
+        """ Checks validity of credentials sent by client """
         all_orders = None
         self.conn = sqlite3.connect('Databases/registered.db')
         cursor = self.conn.cursor().execute('SELECT * FROM Registered WHERE Email=? AND Password=?',
@@ -393,12 +392,14 @@ class Server:
         self.conn.close()
 
     def addroom(self, values, sock):
+        """ Checks if room exists and adds a room accordingly """
         conn = sqlite3.connect('Databases/database.db')
         try:
             cursor = conn.cursor().execute(f'SELECT * FROM Offered WHERE RoomName={values[0]}').fetchone()
             if cursor is not None:
                 sock.send('Exists: Room Name is taken'.encode())
             else:
+                print(values[7])
                 raise ValueError
         except:
             cursor = conn.cursor()
@@ -407,7 +408,7 @@ class Server:
                 ' Price, First, Last, ImagePath, Conditions) VALUES (?,?,?,?,?,?,?,?)',
                 (values[0], values[5], values[1], values[2], values[3], values[4], values[6], values[7]))
             conn.commit()
-            print('here222222')
+            sock.send('Success: Added room'.encode())
         conn.close()
 
     def sendimages(self, sock):

@@ -3,6 +3,7 @@ import math
 import pickle
 import re
 import shutil
+import socket
 import time
 import tkinter.messagebox
 from socket import *
@@ -81,7 +82,6 @@ class Client:
         self.get_database('database')
 
     def listen(self):
-        flag = True  # used in case of admin using client interface
         while 1:
             data = self.client.recv(self.BUF)
             if not data:
@@ -92,12 +92,12 @@ class Client:
                     self.images = pickle.loads(self.client.recv(self.BUF))
                     self.attraction_images = pickle.loads((self.client.recv(self.BUF)))
                     self.getimage()
-                    if self.world_active:
-                        self.clear(self.root2)
-                        self.worldrooms('Normal', False)
-                elif 'Error:' in datacontent or 'Exists:' in datacontent:  # Errors
-                    tkinter.messagebox.showerror(message=datacontent)
-                elif 'Success' in datacontent:
+                elif 'Error:' in datacontent or 'Exists:' in datacontent or 'Success:' in datacontent:  # Errors, Successes
+                    if 'Success:' in datacontent:
+                        tkinter.messagebox.showinfo(message=datacontent)
+                    else:
+                        tkinter.messagebox.showerror(message=datacontent)
+                elif 'Success' in datacontent:  # successfully connected user
                     self.log1.config(text='Logout', command=self.logout)
                     self.recent = Button(self.root,
                                          command=self.orders, text='Recent orders', font=('Helvetica', 11),
@@ -125,17 +125,17 @@ class Client:
             except Exception as e:
                 print(e)
                 try:
-                    if type(pickle.loads(data)[0]) is not bool and flag:
+                    if type(pickle.loads(data)[0]) is not bool:
                         self.recorders = pickle.loads(data)[0]
-                        print(self.recorders)
-                        flag = False
                     else:  # CHECK RESULTS
-                        if pickle.loads(data)[0]:  # if passed
+                        if pickle.loads(data)[0]:  # if passed room check
                             self.purchase_screen(pickle.loads(data)[1])  # (total)
                         else:
-                            tkinter.messagebox.showinfo(self.root3,message='The selected date is taken')
+                            tkinter.messagebox.showinfo(self.root3, message='The selected date is taken')
                             self.removeinst(self.row)
-                except: pass
+                except:
+                    tkinter.messagebox.showinfo(message='Please use Admin interface')
+                    self.root.destroy()
 
     def rating(self, name):
         rate = Tk()
@@ -165,7 +165,9 @@ class Client:
     def orders(self):
         if len(self.recorders) != 0:
             self.root5 = Tk()
-            orders1 = Listbox(self.root5, font=('Helvetica', 12), bg='#CCCCCC')
+            f = ('Helvetica', 12)
+            Label(self.root5, text='Room Name', font=f, bg='#252221', fg='lightgray').grid(sticky=NSEW)
+            orders1 = Listbox(self.root5, font=f, bg='#CCCCCC')
             for row in self.recorders:
                 orders1.insert(END, row[0])
             orders1.grid()
@@ -217,7 +219,7 @@ class Client:
         t = datetime.datetime.strptime(line[4], '%d/%m/%Y')
         if t.date() > self.servertime:
             cancel = Button(right_frame,
-                            command=lambda: [self.cancel(line), self.root4.destroy(), self.root5.destroy(),
+                            command=lambda: [self.cancel(line), tkinter.messagebox.showinfo(message='Cancelled'), self.root4.destroy(), self.root5.destroy(),
                                              self.orders()],
                             text='Cancel', width=15, font=('Helvetica', 11), cursor='hand2',
                             bg='#252221', fg='lightgray', activebackground='lightgray',
@@ -332,7 +334,7 @@ class Client:
                                     image_zoom_visibility=(5, 22),
                                     marker_color_circle="black",
                                     marker_color_outside="gray40", text=row[0],
-                                    command=lambda here=row: self.askroomtk(here, mindate, maxdate))
+                                    command=lambda row=row, mindate=mindate, maxdate=maxdate: self.askroomtk(row, mindate, maxdate))
         for row in self.all_attractions:
             self.cord = row[1].split(' ')
             img = ImageTk.PhotoImage(Image.open(f'Attractions_images/{row[2]}').resize((150, 150)))
@@ -444,7 +446,7 @@ class Client:
                 if i[2].split(' ')[0] == str(row.position[0]) and i[2].split(' ')[1] == str(row.position[1]):
                     self.row = i
                     break
-            self.root3 = Toplevel()
+            self.root3 = Tk()
             self.root3.protocol("WM_DELETE_WINDOW", lambda: [self.removeinst(self.row),
                                             self.root3.destroy(), self.reset_root3()])
             self.root3.config(bg='#252221')
@@ -452,17 +454,16 @@ class Client:
             self.client.send(pickle.dumps(self.row))
             f = ('Helvetica', 14)
             right_frame = Frame(self.root3, bd=2, bg='#CCCCCC', padx=10, pady=10)
-            img = ImageTk.PhotoImage(Image.open(f'Images/{self.row[6]}').resize((200, 200)))
+            image = Image.open(f'Images/{self.row[6]}').resize((200, 200))
+            img = ImageTk.PhotoImage(image, master=self.root3)
             panel = Label(right_frame, image=img)
             panel.grid(row=3, rowspan=3, column=0, padx=10)
             Label(right_frame, text="Price (per night)", bg='#CCCCCC', font=f).grid(row=1, column=1, sticky=W, pady=10)
             Label(right_frame, text="Conditions", bg='#CCCCCC', font=f).grid(row=2, column=1, sticky=W, pady=10)
-            Label(right_frame, text="From", bg='#CCCCCC', font=f).grid(row=3, column=1, sticky=W, pady=10)
-            Label(right_frame, text="Until", bg='#CCCCCC', font=f).grid(row=4, column=1, sticky=W, pady=10)
-            Label(right_frame, text="Check-in", bg='#CCCCCC', font=f).grid(row=5, column=1, sticky=W, pady=10)
-            Label(right_frame, text="Check-out", bg='#CCCCCC', font=f).grid(row=6, column=1, sticky=W, pady=10)
-            Label(right_frame, text="Where", bg='#CCCCCC', font=f).grid(row=7, column=1, sticky=W, pady=10)
-            Label(right_frame, text="Recipient", bg='#CCCCCC', font=f).grid(row=8, column=1, sticky=W, pady=10)
+            Label(right_frame, text="Check-in", bg='#CCCCCC', font=f).grid(row=3, column=1, sticky=W, pady=10)
+            Label(right_frame, text="Check-out", bg='#CCCCCC', font=f).grid(row=4, column=1, sticky=W, pady=10)
+            Label(right_frame, text="Where", bg='#CCCCCC', font=f).grid(row=5, column=1, sticky=W, pady=10)
+            Label(right_frame, text="Recipient", bg='#CCCCCC', font=f).grid(row=6, column=1, sticky=W, pady=10)
 
             cord = self.row[2].split(' ')
             conditions = Label(right_frame, text=f'{self.row[8]}', font=f, bg='#CCCCCC')
@@ -470,9 +471,9 @@ class Client:
             when = Label(right_frame, text=f'{self.row[4]}', font=f, bg='#CCCCCC')
             until = Label(right_frame, text=f'{self.row[5]}', font=f, bg='#CCCCCC')
             if self.row[-2] is not None:
-                Label(right_frame, text="Rating", bg='#CCCCCC', font=f).grid(row=9, column=1, sticky=W, pady=10)
+                Label(right_frame, text="Rating", bg='#CCCCCC', font=f).grid(row=7, column=1, sticky=W, pady=10)
                 rating = Label(right_frame, text=f'{self.row[-2]} / 10', font=f, bg='#CCCCCC')
-                rating.grid(row=9, column=2, pady=10, padx=20)
+                rating.grid(row=7, column=2, pady=10, padx=20)
             self.where = Label(right_frame, text=f'{tkintermapview.convert_coordinates_to_address(float(cord[0]), float(cord[1])).street}',
                                font=f,
                                bg='#CCCCCC')
@@ -482,9 +483,9 @@ class Client:
                                activeforeground='#252221')
             self.timer.grid(column=8, row=0, sticky=E)
             self.duration1 = DateEntry(right_frame, font=f, locale='en_IL', date_pattern='dd/mm/yyyy',
-                                       mindate=mindate, maxdate=maxdate, showweeknumbers=0)
+                                       mindate=mindate if mindate > datetime.datetime.today() else datetime.datetime.today(), maxdate=maxdate, showweeknumbers=0)
             self.duration2 = DateEntry(right_frame, font=f, locale='en_IL', date_pattern='dd/mm/yyyy',
-                                       mindate=mindate, maxdate=maxdate, showweeknumbers=0)
+                                       mindate=mindate if mindate > datetime.datetime.today() else datetime.datetime.today(), maxdate=maxdate, showweeknumbers=0)
             proceed = Button(right_frame,
                              width=15, text='Proceed', command=self.askroom, font=('Helvetica', 11), cursor='hand2',
                              bg='#252221', fg='lightgray',
@@ -498,14 +499,12 @@ class Client:
                            activeforeground='#252221')
             price.grid(row=1, column=2, pady=10, padx=20)
             conditions.grid(row=2, column=2, pady=10, padx=20)
-            when.grid(row=3, column=2, pady=10, padx=20)
-            until.grid(row=4, column=2, pady=10, padx=20)
-            self.duration1.grid(row=5, column=2, pady=10)
-            self.duration2.grid(row=6, column=2, pady=10)
-            self.where.grid(row=7, column=2, pady=10, padx=20)
-            self.recipient.grid(row=8, column=2, pady=10, padx=20)
-            close.grid(row=10, column=2, pady=10, padx=10)
-            proceed.grid(row=10, column=1, pady=10, padx=10)
+            self.duration1.grid(row=3, column=2, pady=10)
+            self.duration2.grid(row=4, column=2, pady=10)
+            self.where.grid(row=5, column=2, pady=10, padx=20)
+            self.recipient.grid(row=6, column=2, pady=10, padx=20)
+            close.grid(row=8, column=2, pady=10, padx=10)
+            proceed.grid(row=8, column=1, pady=10, padx=10)
             right_frame.grid()
             self.update_clock(60)
             self.root3.mainloop()
@@ -751,7 +750,7 @@ class Client:
                         f'ADD {self.roomname.get()}. {c[0]} {c[1]}.'
                         f' {int(self.price.get())}.'
                         f' {self.duration[0]}. {self.duration[1]}'
-                        f', {self.__user[0]}. {self.filename[self.filename.rfind("/") + 1:]}.'
+                        f'. {self.__user[0]}. {self.filename[self.filename.rfind("/") + 1:]}.'
                         f' {self.conditions.get()}'.encode())
                     self.sendimage()
                     self.filename = ''
@@ -773,9 +772,9 @@ class Client:
         f = ('Helvetica', 14)
         right_frame3 = Frame(root7, bd=2, bg='#CCCCCC', padx=10, pady=10)
         Label(right_frame3, text="Total", bg='#CCCCCC', font=f).grid(row=0, column=0, sticky=W, pady=10)
-        Label(right_frame3, text="Credit Card", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
+        # Label(right_frame3, text="Credit Card", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
         total = Label(right_frame3, text=f'{total}₪', font=f, bg='#CCCCCC')
-        name = Entry(right_frame3, font=f)
+        # name = Entry(right_frame3, font=f)
         submit = Button(right_frame3,
                         command=lambda: self.commit_purchase(root7),
                         width=15, text='Submit', font=('Helvetica', 11), cursor='hand2', bg='#252221',
@@ -785,11 +784,11 @@ class Client:
                        cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
                        activeforeground='#252221')
         total.grid(row=0, column=1, pady=10, padx=20)
-        name.grid(row=1, column=1, pady=10, padx=20)
-        close.grid(row=2, column=1, pady=10, padx=10)
-        submit.grid(row=2, column=0, pady=10, padx=10)
+        # name.grid(row=1, column=1, pady=10, padx=20)
+        close.grid(row=1, column=1, pady=10, padx=10)
+        submit.grid(row=1, column=0, pady=10, padx=10)
         right_frame3.pack()
-        self.midwin(root7, 500, 250)
+        self.midwin(root7, 500, 200)
 
     def commit_purchase(self, root7):
         row = list(self.row)
@@ -804,6 +803,7 @@ class Client:
         self.reset_root3()
         self.removeinst(self.row)
         self.row = None
+        tkinter.messagebox.showinfo(message='Room bought')
 
     def loginsend(self, email, pwd, log, message):
         mail_re = re.compile('^[\w\.]+@([\w-]+\.)+[\w-]{2,4}$')

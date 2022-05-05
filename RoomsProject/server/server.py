@@ -21,7 +21,7 @@ class Server:
     def __init__(self):
         self.server = socket(AF_INET, SOCK_STREAM)
         self.server = ssl.wrap_socket(self.server, server_side=True, keyfile='privkey.pem', certfile='certificate.pem')
-        self.server.bind(('192.168.1.197', 50000))
+        self.server.bind(('127.0.0.1', 50000))
         self.server.listen(5)
         self.servertime = datetime.datetime.today().date()
         self.readables = [self.server]
@@ -120,6 +120,15 @@ class Server:
                             del self.admin_dict[remove]
                         break
                     if not data:
+                        print(f'{sock.getpeername()} Disconnected')
+                        self.readables.remove(sock)
+                        self.writeables.remove(sock)
+                        if sock in self.admin_dict.values():
+                            for key, value in self.admin_dict.items():
+                                if sock == value:
+                                    remove = key
+                                    break
+                            del self.admin_dict[remove]
                         break
                     try:
                         datacontent = data.decode()
@@ -130,10 +139,8 @@ class Server:
                         values = datacontent[4:].split('. ')
                         self.getfile(sock, values[6])
                         self.addroom(values, sock)
-                        _thread.start_new_thread(self.broadcast_files, ())
                     elif 'ATTRACTION' in datacontent:
                         values = datacontent[11:].split('. ')
-                        print(values)
                         self.get_attraction_file(sock, values[1])
                         self.add_attraction(values)
                         _thread.start_new_thread(self.broadcast_files, ())
@@ -152,7 +159,6 @@ class Server:
                                 _thread.start_new_thread(self.user_rate, (ret, sock, specific_order))
                     elif datacontent == 'BUY':
                         data = pickle.loads(sock.recv(self.BUF))
-                        print(data)
                         self.conn2 = sqlite3.connect('Databases/registered.db')
                         self.conn2.cursor().execute('INSERT INTO Bought(RoomName, Buyer, First, Last, TOTAL)  '
                                               'VALUES(?,?,?,?,?)',
@@ -187,7 +193,6 @@ class Server:
                     elif datacontent == 'RATE':
                         data = pickle.loads(sock.recv(self.BUF))
                         user, ret, specific_order, all_orders = self.loginuser(data, sock, False)
-                        print(specific_order)
                         _thread.start_new_thread(self.user_rate, (ret, sock, specific_order))
                     elif datacontent == 'RATING':
                         rating = pickle.loads(sock.recv(self.BUF))
@@ -203,7 +208,6 @@ class Server:
                         _thread.start_new_thread(self.check_dates, (data[0], data[1], data[2], sock))
                     elif 'MAKE' in datacontent:
                         user = datacontent[5:]
-                        print(user)
                         self.make_admin(user)
 
     def make_admin(self, user):
@@ -399,7 +403,6 @@ class Server:
             if cursor is not None:
                 sock.send('Exists: Room Name is taken'.encode())
             else:
-                print(values[7])
                 raise ValueError
         except:
             cursor = conn.cursor()
@@ -409,8 +412,9 @@ class Server:
                 (values[0], values[5], values[1], values[2], values[3], values[4], values[6], values[7]))
             conn.commit()
             sock.send('Success: Added room'.encode())
-        conn.close()
 
+        conn.close()
+        _thread.start_new_thread(self.broadcast_files, ())
     def sendimages(self, sock):
         for name in self.lst:
             with open(f'Images/{name}', 'rb') as txt:

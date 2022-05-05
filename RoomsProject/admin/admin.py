@@ -3,6 +3,7 @@ import math
 import pickle
 import re
 import shutil
+import sys
 import time
 import tkinter.messagebox
 from socket import *
@@ -33,7 +34,7 @@ class Admin:
         self.servertime = datetime.datetime.today().date()
         self.client = socket(AF_INET, SOCK_STREAM)
         self.BUF = 2048
-        self.ADDR = ('192.168.1.197', 50000)  # where to connect
+        self.ADDR = ('127.0.0.1', 50000)  # where to connect
         self.client.connect(self.ADDR)
         self.client = ssl.wrap_socket(self.client, server_side=False, keyfile='privkey.pem', certfile='certificate.pem')
         self.images = pickle.loads(self.client.recv(self.BUF))
@@ -189,7 +190,7 @@ class Admin:
             close.grid()
             scrollbar = ttk.Scrollbar(all_orders_tk, orient=VERTICAL, command=orders1.yview)
             orders1.configure(yscrollcommand=scrollbar.set)
-            scrollbar.grid(row=0, column=1, sticky='ns')
+            scrollbar.grid(row=0, column=1, sticky='ns', rowspan=2)
             orders1.bind('<Double-1>', lambda event: self.details(self.all_orders[orders1.curselection()[0]], all_orders_tk))
         else:
             tkinter.messagebox.showinfo(message='No orders have been placed')
@@ -222,6 +223,7 @@ class Admin:
     def orders(self):
         if len(self.recorders) != 0:
             self.root5 = Tk()
+            self.root5.resizable(False, False)
             f = ('Helvetica', 12)
             Label(self.root5, text='Room Name', font=f, bg='#252221', fg='lightgray').grid(sticky=NSEW)
             orders1 = Listbox(self.root5, font=f, bg='#CCCCCC')
@@ -237,13 +239,12 @@ class Admin:
             close.grid()
             scrollbar = ttk.Scrollbar(self.root5, orient=VERTICAL, command=orders1.yview)
             orders1.configure(yscrollcommand=scrollbar.set)
-            scrollbar.grid(row=0, column=1, sticky='ns')
+            scrollbar.grid(row=0, column=1, sticky='ns',rowspan=2)
             orders1.bind('<Double-1>', lambda event: self.details(self.recorders[orders1.curselection()[0]], self.root5))
         else:
             tkinter.messagebox.showinfo(message='You have not placed any order')
 
     def details(self, line, root):
-        print(line)
         self.root4 = Tk()
         self.root4.config(bg='#252221')
         f = ('Helvetica', 14)
@@ -258,7 +259,7 @@ class Admin:
         when = Label(right_frame, text=f'{line[4]}', font=f, bg='#CCCCCC')
         until = Label(right_frame, text=f'{line[5]}', font=f, bg='#CCCCCC')
         try:
-            buyer = Label(right_frame, text=f'{line[-1]}', font=f, bg='#CCCCCC')  # last line added by server (buyer)
+            buyer = Label(right_frame, text=f'{line[9]}', font=f, bg='#CCCCCC')  # last line added by server (buyer)
             Label(right_frame, text="Buyer", bg='#CCCCCC', font=f).grid(row=6, column=0, sticky=W, pady=10)
             buyer.grid(row=6, column=1, pady=10, padx=20)
         except: pass
@@ -324,7 +325,7 @@ class Admin:
                          cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
                          activeforeground='#252221')
         addroom.grid(row=2, column=2, pady=20, padx=20)
-        close = Button(self.root, command=lambda: self.pop(self.root), text='Close', font=('Helvetica', 11),
+        close = Button(self.root, command=lambda: self.pop(), text='Close', font=('Helvetica', 11),
                        cursor='hand2',
                        bg='#252221', fg='lightgray', activebackground='lightgray',
                        activeforeground='#252221')
@@ -334,7 +335,7 @@ class Admin:
         filemenu = Menu(menu, tearoff=0)
         filemenu.add_command(label='Help')
         filemenu.add_separator()
-        filemenu.add_command(label='Exit', command=lambda: self.pop(self.root))
+        filemenu.add_command(label='Exit', command=lambda: self.pop())
         menu.add_cascade(label="More", menu=filemenu)
         self.root.config(menu=menu, bg='lightgray')
         self.root.geometry('900x500')
@@ -737,6 +738,8 @@ class Admin:
 
     def login(self):
         self.root = Tk()
+        self.root.protocol("WM_DELETE_WINDOW", self.pop)
+        self.root.resizable(False, False)
         self.root.config(bg='#252221')
         self.root.bind('<Return>', lambda event: [self.loginsend(email.get(), pwd.get(), message)])
         f = ('Helvetica', 14)
@@ -752,7 +755,7 @@ class Admin:
                        width=15, text='Login', font=('Helvetica', 11), cursor='hand2', bg='#252221', fg='lightgray',
                        activebackground='lightgray',
                        activeforeground='#252221')
-        close = Button(right_frame, command=self.root.destroy, text='Close', width=15, font=('Helvetica', 11), cursor='hand2',
+        close = Button(right_frame, command=self.pop, text='Close', width=15, font=('Helvetica', 11), cursor='hand2',
                        bg='#252221', fg='lightgray', activebackground='lightgray',
                        activeforeground='#252221')
         right_frame.grid(row=0)
@@ -914,14 +917,14 @@ class Admin:
         self.login()
 
     # Do you wish to exit the program entirely?
-    def pop(self, root):
+    def pop(self):
         popup = Tk()
-        popup.resizable(None, None)
+        popup.resizable(False, False)
         popup.config(bg='lightgray')
         lb3 = Label(popup, text='Do you wish to exit?', font=("Helvetica", 15), bg='#252221', fg='lightgray')
         lb3.pack(fill=BOTH)
         # Destroy both popup and root windows
-        yes = Button(popup, text='Yes', command=lambda: [popup.destroy(), root.destroy()], bg='#252221',
+        yes = Button(popup, text='Yes', command=sys.exit, bg='#252221',
                      fg='lightgray', activebackground='lightgray', activeforeground='#252221', padx=10, cursor='hand2')
         yes.pack(pady=10, side=RIGHT)
 
@@ -993,7 +996,7 @@ class Admin:
             tree.insert('', END, values=data)
         scrollbar = ttk.Scrollbar(root, orient=VERTICAL, command=tree.yview)
         tree.configure(yscroll=scrollbar.set)
-        scrollbar.grid(row=1, column=1, sticky='nsw')
+        scrollbar.grid(row=1, column=1, sticky='ns')
         self.midwin(root, 750, 325)
 
     def search_record(self, tree, record, database):
@@ -1017,10 +1020,9 @@ class Admin:
 
     def make_admin(self, tree, root):
         selected = tree.item(tree.selection())["values"]
-        print(selected)
         if selected and selected[4] != 1:
             admin_tk = Tk()
-            admin_tk.resizable(None, None)
+            admin_tk.resizable(False, False)
             admin_tk.config(bg='lightgray')
             lb3 = Label(admin_tk, text=f'Do you wish to make {selected[0]} an Admin?', font=("Helvetica", 15), bg='#252221', fg='lightgray')
             lb3.pack(fill=BOTH)
@@ -1061,7 +1063,7 @@ class Admin:
         tree.column('First', width=20)
         tree.heading('Last', text='Until')
         tree.column('Last', width=20)
-        tree.heading('ImagePath', text='Image Path')
+        tree.heading('ImagePath', text='Image')
         tree.column('ImagePath', width=20)
         tree.heading('RATING', text='Rating')
         tree.column('RATING', width=20)
@@ -1088,7 +1090,7 @@ class Admin:
             tree.insert('', END, values=data)
         scrollbar = ttk.Scrollbar(root, orient=VERTICAL, command=tree.yview)
         tree.configure(yscroll=scrollbar.set)
-        scrollbar.grid(row=1, column=1, sticky='nsw')
+        scrollbar.grid(row=1, column=1, sticky='ns')
         self.midwin(root, 750, 325)
 
 

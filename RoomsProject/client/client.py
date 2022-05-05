@@ -4,13 +4,13 @@ import pickle
 import re
 import shutil
 import socket
+import sys
 import time
 import tkinter.messagebox
 from socket import *
 from tkinter import *
 import _thread
 import sqlite3
-
 import tkintermapview
 from tkintermapview import TkinterMapView
 from tkinter import filedialog
@@ -18,7 +18,6 @@ from PIL import Image, ImageTk
 import os
 from tkcalendar import DateEntry
 import ssl
-
 from tkinter import ttk
 """
 Client by Alon Levy
@@ -34,12 +33,11 @@ class Client:
         self.servertime = datetime.datetime.today().date()
         self.client = socket(AF_INET, SOCK_STREAM)
         self.BUF = 2048
-        self.ADDR = ('192.168.1.197', 50000)  # where to connect
+        self.ADDR = ('127.0.0.1', 50000)  # where to connect
         self.client.connect(self.ADDR)
         self.client = ssl.wrap_socket(self.client, server_side=False, keyfile='privkey.pem', certfile='certificate.pem')
         self.images = pickle.loads(self.client.recv(self.BUF))
         self.attraction_images = pickle.loads(self.client.recv(self.BUF))
-        self.world_active = False
         self.getimage()
         self.recorders = []
         self.server = self.client.getpeername()
@@ -165,6 +163,7 @@ class Client:
     def orders(self):
         if len(self.recorders) != 0:
             self.root5 = Tk()
+            self.root5.resizable(False, False)
             f = ('Helvetica', 12)
             Label(self.root5, text='Room Name', font=f, bg='#252221', fg='lightgray').grid(sticky=NSEW)
             orders1 = Listbox(self.root5, font=f, bg='#CCCCCC')
@@ -180,7 +179,7 @@ class Client:
             close.grid()
             scrollbar = ttk.Scrollbar(self.root5, orient=VERTICAL, command=orders1.yview)
             orders1.configure(yscrollcommand=scrollbar.set)
-            scrollbar.grid(row=0, column=1, sticky='ns')
+            scrollbar.grid(row=0, column=1, sticky='ns',rowspan=2)
             orders1.bind('<Double-1>', lambda event: self.details(self.recorders[orders1.curselection()[0]]))
         else:
             tkinter.messagebox.showinfo(message='You have not placed any order')
@@ -243,6 +242,7 @@ class Client:
 
     def main(self):
         self.root = Tk()
+        self.root.protocol("WM_DELETE_WINDOW", self.pop)
         self.root.config(bg='lightgray')
         self.root.grid_columnconfigure(2, weight=1)
         self.root.grid_rowconfigure(1, weight=1)
@@ -269,7 +269,7 @@ class Client:
                          cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
                          activeforeground='#252221')
         addroom.grid(row=2, column=2, pady=20, padx=20)
-        close = Button(self.root, command=lambda: self.pop(self.root), text='Close', font=('Helvetica', 11),
+        close = Button(self.root, command=lambda: self.pop(), text='Close', font=('Helvetica', 11),
                        cursor='hand2',
                        bg='#252221', fg='lightgray', activebackground='lightgray',
                        activeforeground='#252221')
@@ -279,7 +279,7 @@ class Client:
         filemenu = Menu(menu, tearoff=0)
         filemenu.add_command(label='Help')
         filemenu.add_separator()
-        filemenu.add_command(label='Exit', command=lambda: self.pop(self.root))
+        filemenu.add_command(label='Exit', command=lambda: self.pop())
         menu.add_cascade(label="More", menu=filemenu)
         self.root.config(menu=menu, bg='lightgray')
         self.midwin(self.root, 900, 500)
@@ -329,7 +329,7 @@ class Client:
                 maxdate = row[5].split('/')
                 mindate = datetime.datetime(int(mindate[2]), int(mindate[1]), int(mindate[0]))
                 maxdate = datetime.datetime(int(maxdate[2]), int(maxdate[1]), int(maxdate[0]))
-                img = ImageTk.PhotoImage(Image.open(f'Images/{row[6]}').resize((150, 150)))
+                img = ImageTk.PhotoImage(Image.open(f'Images/{row[6]}').resize((150, 150)), master=self.root2)
                 self.map.set_marker(float(self.cord[0]), float(self.cord[1]), image=img,
                                     image_zoom_visibility=(5, 22),
                                     marker_color_circle="black",
@@ -337,7 +337,7 @@ class Client:
                                     command=lambda row=row, mindate=mindate, maxdate=maxdate: self.askroomtk(row, mindate, maxdate))
         for row in self.all_attractions:
             self.cord = row[1].split(' ')
-            img = ImageTk.PhotoImage(Image.open(f'Attractions_images/{row[2]}').resize((150, 150)))
+            img = ImageTk.PhotoImage(Image.open(f'Attractions_images/{row[2]}').resize((150, 150)), master=self.root2)
             marker = self.map.set_marker(float(self.cord[0]), float(self.cord[1]), image=img,
                                 image_zoom_visibility=(5, 22),
                                 marker_color_circle="white",
@@ -823,14 +823,14 @@ class Client:
         self.main()
 
     # Do you wish to exit the program entirely?
-    def pop(self, root):
+    def pop(self):
         popup = Tk()
-        popup.resizable(0, 0)
+        popup.resizable(False, False)
         popup.config(bg='lightgray')
         lb3 = Label(popup, text='Do you wish to exit?', font=("Helvetica", 15), bg='#252221', fg='lightgray')
         lb3.pack(fill=BOTH)
         # Destroy both popup and root windows
-        yes = Button(popup, text='Yes', command=lambda: [popup.destroy(), root.destroy()], bg='#252221',
+        yes = Button(popup, text='Yes', command=sys.exit, bg='#252221',
                      fg='lightgray', activebackground='lightgray', activeforeground='#252221', padx=10, cursor='hand2')
         yes.pack(pady=10, side=RIGHT)
 

@@ -34,7 +34,7 @@ class Client:
         self.world_active = False
         self.client = socket(AF_INET, SOCK_STREAM)
         self.BUF = 2048
-        self.ADDR = ('127.0.0.1', 50000)  # where to connect
+        self.ADDR = ('172.26.128.1', 50000)  # where to connect
         self.client.connect(self.ADDR)
         self.client = ssl.wrap_socket(self.client, server_side=False, keyfile='privkey.pem', certfile='certificate.pem')
         self.images = pickle.loads(self.client.recv(self.BUF))

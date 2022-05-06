@@ -21,7 +21,7 @@ class Server:
     def __init__(self):
         self.server = socket(AF_INET, SOCK_STREAM)
         self.server = ssl.wrap_socket(self.server, server_side=True, keyfile='privkey.pem', certfile='certificate.pem')
-        self.server.bind(('127.0.0.1', 50000))
+        self.server.bind(('172.16.188.125', 50000))
         self.server.listen(5)
         self.servertime = datetime.datetime.today().date()
         self.readables = [self.server]

@@ -93,7 +93,9 @@ class Admin:
     def listen(self):
         """listen to server, all commands sent from server are processed here"""
         while 1:
-            data = self.client.recv(self.BUF)
+            try:
+                data = self.client.recv(self.BUF)
+            except: break
             if not data:
                 break
             try:
@@ -181,6 +183,7 @@ class Admin:
                         tkinter.messagebox.showerror(message='Not an admin')
                         self.root.destroy()
                 except: pass
+        os._exit(0)
 
     def update_world_rooms(self):
         """update world rooms window, used in room creation and attraction being added"""
@@ -292,6 +295,7 @@ class Admin:
 
     def orders(self):
         """all orders made by this user"""
+        print(self.recorders)
         if len(self.recorders) != 0:
             self.root5 = Tk()
             self.root5.resizable(False, False)
@@ -367,7 +371,7 @@ class Admin:
 
     def cancel(self, line):
         """Cancels bought room, contacts server informing it"""
-        if line is self.recorders:
+        if line in self.recorders:
             self.recorders.remove(line)
         line = list(line)
         line.append(self.__user[0])
@@ -976,7 +980,7 @@ class Admin:
     def commit_purchase(self, root7, total):
         """Sends purchase query"""
         row = list(self.row)
-        row.append(total)
+        row[3] = total
         self.recorders.append(row)
         row[4], row[5] = self.duration1.get_date().strftime(
             '%d/%m/%Y'), self.duration2.get_date().strftime('%d/%m/%Y')

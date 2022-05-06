@@ -190,6 +190,7 @@ class Server:
                         self.conn.cursor().execute(f'DELETE FROM Bought WHERE RoomName=? AND Buyer=?;', (data[0], data[-1]))
                         self.conn.commit()
                         self.conn.close()
+                        _thread.start_new_thread(self.inform_admins, ())
                     elif datacontent == 'DATE':
                         data = pickle.loads(sock.recv(self.BUF))
                         self.servertime = data

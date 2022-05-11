@@ -19,7 +19,6 @@ from tkcalendar import DateEntry
 import ssl
 from tkinter import ttk
 
-
 """
 Admin by Alon Levy
 This aims to allow user interaction of which
@@ -32,6 +31,10 @@ file = __file__
 class Admin:
     def __init__(self):
         """Base creation of all essential variables and use of functions"""
+        if not os.path.exists('Images/'):
+            os.makedirs('Images/')
+        if not os.path.exists('Attractions_images/'):
+            os.makedirs('Attractions_images/')
         self.servertime = datetime.datetime.today().date()
         self.world_active = False
         self.client = socket(AF_INET, SOCK_STREAM)
@@ -39,19 +42,14 @@ class Admin:
         self.ADDR = ('127.0.0.1', 50000)  # where to connect
         self.client.connect(self.ADDR)
         self.client = ssl.wrap_socket(self.client, server_side=False, keyfile='privkey.pem', certfile='certificate.pem')
-        self.images = pickle.loads(self.client.recv(self.BUF))
-        self.attraction_images = pickle.loads(self.client.recv(self.BUF))
-
-        self.getimage()
+        images = pickle.loads(self.client.recv(self.BUF))
+        attraction_images = pickle.loads(self.client.recv(self.BUF))
+        self.getimage(images, attraction_images)
         self.recorders = []
         self.server = self.client.getpeername()
         _thread.start_new_thread(self.listen, ())
         self.__user = ['Guest', None]
-        self.__creds = None
-        if not os.path.exists('Images/'):
-            os.makedirs('Images/')
-        if not os.path.exists('Attractions_images/'):
-            os.makedirs('Attractions_images/')
+        self.name = 'Guest'
         self.lst = os.listdir('Images/')
         print('___SUCCESS___')
         self.login()
@@ -68,9 +66,9 @@ class Admin:
                 txt.write(data2)
                 s += len(data2)
 
-    def getimage(self):
+    def getimage(self, images, attraction_images):
         """get image from server"""
-        for name in self.images:
+        for name in images:
             data = self.client.recv(self.BUF)
             img = pickle.loads(data)
             s = 0
@@ -79,7 +77,7 @@ class Admin:
                     data2 = self.client.recv(self.BUF)
                     txt.write(data2)
                     s += len(data2)
-        for name in self.attraction_images:
+        for name in attraction_images:
             data = self.client.recv(self.BUF)
             img = pickle.loads(data)
             s = 0
@@ -95,16 +93,17 @@ class Admin:
         while 1:
             try:
                 data = self.client.recv(self.BUF)
-            except: break
+            except:
+                break
             if not data:
                 break
             try:
                 datacontent = data.decode()
                 print(datacontent)
                 if datacontent == 'FILES':
-                    self.images = pickle.loads(self.client.recv(self.BUF))
-                    self.attraction_images = pickle.loads((self.client.recv(self.BUF)))
-                    self.getimage()
+                    images = pickle.loads(self.client.recv(self.BUF))
+                    attraction_images = pickle.loads((self.client.recv(self.BUF)))
+                    self.getimage(images, attraction_images)
                     if self.world_active:
                         self.update_world_rooms()
                 elif 'Error:' in datacontent or 'Exists:' in datacontent or 'Success:' in datacontent:  # Errors, Successes
@@ -113,19 +112,16 @@ class Admin:
                     else:
                         tkinter.messagebox.showerror(message=datacontent)
                 elif 'Success' in datacontent:
-                    self.__user[0] = data.decode()[8:]
-                    self.__user[1] = self.__attempt
                     self.clear(self.root)
                     self.main()
-                    self.log1.config(text='Logout', command=self.logout)
-                    self.recent = Button(self.root,
-                                         command=self.orders, text='Recent orders', font=('Helvetica', 11),
-                                         cursor='hand2',
-                                         bg='#252221', fg='lightgray', activebackground='lightgray',
-                                         activeforeground='#252221')
-                    self.recent.grid(column=2, row=0, sticky=W)
+                    self.background_label.place(x=0, y=0, relwidth=1, relheight=1)
+                    self.midwin(self.root, 900, 500)
 
-                    self.user1.config(text=f'Welcome,\n{self.__user[0]}')
+                    datacontent = datacontent.split(' ')
+                    self.__user[0] = datacontent[1]
+                    self.__user[1] = self.__attempt
+                    self.name = datacontent[2]
+                    self.user1.config(text=f'Welcome,\n{self.name}')
                     tkinter.messagebox.showinfo(message='Success')
 
                 elif datacontent == 'DESTROY':
@@ -156,33 +152,12 @@ class Admin:
                     elif pickle.loads(data)[1][4] == 1:
                         self.recorders = pickle.loads(data)[0]
                         self.all_orders = pickle.loads(data)[2]
-                        self.change = Button(self.root,
-                                             command=self.change_date_tk, text='Change Date', font=('Helvetica', 11),
-                                             cursor='hand2',
-                                             bg='#252221', fg='lightgray', activebackground='lightgray',
-                                             activeforeground='#252221')
-                        self.change.grid(column=2, row=0)
-                        Button(self.root,
-                                             command=self.purchases, text='All Purchases', font=('Helvetica', 11),
-                                             cursor='hand2',height=2,
-                                             bg='#252221', fg='lightgray', activebackground='lightgray',
-                                             activeforeground='#252221').grid(row=1, column=5, sticky='e')
-                        Button(self.root,
-                                             command=self.users_data, text='All Users', font=('Helvetica', 11),
-                                             cursor='hand2',height=2,
-                                             bg='#252221', fg='lightgray', activebackground='lightgray',
-                                             activeforeground='#252221').grid(row=2, column=5, sticky='ne')
-                        Button(self.root,
-                                             command=self.offers_data, text='All Offers', font=('Helvetica', 11),
-                                             cursor='hand2',height=2,
-                                             bg='#252221', fg='lightgray', activebackground='lightgray',
-                                             activeforeground='#252221').grid(row=2, column=5, sticky='e')
-
                     else:
                         self.root.withdraw()
                         tkinter.messagebox.showerror(message='Not an admin')
                         self.root.destroy()
-                except: pass
+                except:
+                    pass
         os._exit(0)
 
     def update_world_rooms(self):
@@ -262,7 +237,8 @@ class Admin:
             scrollbar = ttk.Scrollbar(all_orders_tk, orient=VERTICAL, command=orders1.yview)
             orders1.configure(yscrollcommand=scrollbar.set)
             scrollbar.grid(row=0, column=1, sticky='ns', rowspan=2)
-            orders1.bind('<Double-1>', lambda event: self.details(self.all_orders[orders1.curselection()[0]], all_orders_tk))
+            orders1.bind('<Double-1>',
+                         lambda event: self.details(self.all_orders[orders1.curselection()[0]], all_orders_tk))
         else:
             tkinter.messagebox.showinfo(message='No orders have been placed')
 
@@ -275,7 +251,8 @@ class Admin:
         lb3.pack(fill=BOTH)
         scale = Scale(rate, from_=1, to=10, bg='#252221', orient=HORIZONTAL, fg='lightgray')
         scale.pack(fill=BOTH, pady=10)
-        submit = Button(rate, text='Submit', command=lambda: [self.rate(scale.get(), name), rate.destroy()], bg='#252221',
+        submit = Button(rate, text='Submit', command=lambda: [self.rate(scale.get(), name), rate.destroy()],
+                        bg='#252221',
                         fg='lightgray', activebackground='lightgray', activeforeground='#252221', padx=10,
                         cursor='hand2')
         submit.pack(pady=10, side=RIGHT)
@@ -314,17 +291,18 @@ class Admin:
             close.grid()
             scrollbar = ttk.Scrollbar(self.root5, orient=VERTICAL, command=orders1.yview)
             orders1.configure(yscrollcommand=scrollbar.set)
-            scrollbar.grid(row=0, column=1, sticky='ns',rowspan=2)
-            orders1.bind('<Double-1>', lambda event: self.details(self.recorders[orders1.curselection()[0]], self.root5))
+            scrollbar.grid(row=0, column=1, sticky='ns', rowspan=2)
+            orders1.bind('<Double-1>',
+                         lambda event: self.details(self.recorders[orders1.curselection()[0]], self.root5))
         else:
             tkinter.messagebox.showinfo(message='You have not placed any order')
 
     def details(self, line, root):
         """full details of a room bought by user"""
-        self.root4 = Tk()
-        self.root4.config(bg='#252221')
+        details_tk = Tk()
+        details_tk.config(bg='#252221')
         f = ('Helvetica', 14)
-        right_frame = Frame(self.root4, bd=2, bg='#CCCCCC', padx=10, pady=10)
+        right_frame = Frame(details_tk, bd=2, bg='#CCCCCC', padx=10, pady=10)
         Label(right_frame, text="Total", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
         Label(right_frame, text="Check-in", bg='#CCCCCC', font=f).grid(row=2, column=0, sticky=W, pady=10)
         Label(right_frame, text="Check-out", bg='#CCCCCC', font=f).grid(row=3, column=0, sticky=W, pady=10)
@@ -338,13 +316,14 @@ class Admin:
             buyer = Label(right_frame, text=f'{line[9]}', font=f, bg='#CCCCCC')  # last line added by server (buyer)
             Label(right_frame, text="Buyer", bg='#CCCCCC', font=f).grid(row=6, column=0, sticky=W, pady=10)
             buyer.grid(row=6, column=1, pady=10, padx=20)
-        except: pass
+        except:
+            pass
 
         self.where = Label(right_frame, text=f'{format(float(cord[0]), ".2f"), format(float(cord[1]), ".2f")}', font=f,
                            bg='#CCCCCC')
         self.recipient = Label(right_frame, text=f'{line[1]}', font=f, bg='#CCCCCC')
         close = Button(right_frame,
-                       command=self.root4.destroy,
+                       command=details_tk.destroy,
                        text='Close', width=15, font=('Helvetica', 11),
                        cursor='hand2',
                        bg='#252221', fg='lightgray', activebackground='lightgray',
@@ -359,7 +338,7 @@ class Admin:
         t = datetime.datetime.strptime(line[4], '%d/%m/%Y')
         if t.date() > self.servertime:
             cancel = Button(right_frame,
-                            command=lambda: [self.cancel(line), self.root4.destroy(), root.destroy(),
+                            command=lambda: [self.cancel(line), details_tk.destroy(), root.destroy(),
                                              tkinter.messagebox.showinfo(message='Cancelled')],
                             text='Cancel', width=15, font=('Helvetica', 11), cursor='hand2',
                             bg='#252221', fg='lightgray', activebackground='lightgray',
@@ -367,30 +346,37 @@ class Admin:
             cancel.grid(row=7, column=0, pady=10, padx=20)
 
         right_frame.grid()
-        self.root4.mainloop()
+        details_tk.mainloop()
 
     def cancel(self, line):
         """Cancels bought room, contacts server informing it"""
         if line in self.recorders:
             self.recorders.remove(line)
         line = list(line)
-        line.append(self.__user[0])
         self.client.send('UPDATE'.encode())
         self.client.send(pickle.dumps(line))
 
     def main(self):
         """main screen, all functions lead from here on"""
         self.root.bind('<Return>', lambda event: None)
+        self.background_image = ImageTk.PhotoImage(Image.open(f'misc/background.jpg').resize((900, 500)))
+        self.background_label = Label(self.root, image=self.background_image)
         self.root.grid_columnconfigure(2, weight=1)
         self.root.grid_rowconfigure(1, weight=1)
         self.root.grid_rowconfigure(2, weight=1)
-        self.log1 = Button(self.root, command=self.login, text='Login', font=('Helvetica', 11), cursor='hand2',
+        self.log1 = Button(self.root, command=self.logout, text='Logout', font=('Helvetica', 11), cursor='hand2',
                            bg='#252221', fg='lightgray', activebackground='lightgray',
                            activeforeground='#252221')
         self.log1.grid(column=1, row=0, sticky=W)
-        self.user1 = Label(self.root, text=f'Welcome,\n{self.__user[0]}', font=('Helvetica', 12),
+        self.recent = Button(self.root,
+                             command=self.orders, text='Recent orders', font=('Helvetica', 11),
+                             cursor='hand2',
+                             bg='#252221', fg='lightgray', activebackground='lightgray',
+                             activeforeground='#252221')
+        self.recent.grid(column=2, row=0, sticky=W)
+        self.user1 = Label(self.root, text=f'Welcome,\n{self.name}', font=('Helvetica', 12),
                            bg='#252221', fg='lightgray', activebackground='lightgray',
-                           activeforeground='#252221')
+                           activeforeground='#252221', borderwidth=1, relief="groove")
         self.user1.grid(column=5, row=0, sticky=E)
         findroom = Button(self.root, command=lambda: self.worldrooms("Normal", True), width=25, height=2,
                           text='Find a Room', font=('Helvetica', 14),
@@ -412,11 +398,15 @@ class Admin:
         menu = Menu(self.root)
         filemenu = Menu(menu, tearoff=0)
         filemenu.add_command(label='Help')
+        filemenu.add_command(label='Change Date', command=self.change_date_tk)
+        filemenu.add_command(label='All Purchases', command=self.purchases)
+        filemenu.add_command(label='All Users', command=self.users_data)
+        filemenu.add_command(label='All Offers', command=self.offers_data)
         filemenu.add_separator()
-        filemenu.add_command(label='Exit', command=lambda: self.pop())
+        filemenu.add_command(label='Exit', command=self.pop)
         menu.add_cascade(label="More", menu=filemenu)
         self.root.config(menu=menu, bg='lightgray')
-        self.root.geometry('900x500')
+        self.midwin(self.root, 900, 500)
 
     def searchplace(self, *args):
         """search engine, (used in worldrooms function) aims to find user's queried place there"""
@@ -444,10 +434,11 @@ class Admin:
         self.root2.geometry('800x600')
         self.map = TkinterMapView(self.root2, width=800, height=550, corner_radius=0)
         self.map.add_right_click_menu_command(label="Add an Attraction",
-                                                command=self.add_marker_event_tk,
-                                                pass_coords=True)
-        self.map.set_tile_server("https://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}&s=Ga",max_zoom=22)\
-            if mode == 'Normal' else self.map.set_tile_server("https://mt0.google.com/vt/lyrs=s&hl=en&x={x}&y={y}&z={z}&s=Ga",max_zoom=22)
+                                              command=self.add_marker_event_tk,
+                                              pass_coords=True)
+        self.map.set_tile_server("https://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}&s=Ga", max_zoom=22) \
+            if mode == 'Normal' else self.map.set_tile_server(
+            "https://mt0.google.com/vt/lyrs=s&hl=en&x={x}&y={y}&z={z}&s=Ga", max_zoom=22)
         self.map.set_address('Israel')
         self.map.set_zoom(7)
         self.map.grid(row=0, column=0, sticky='nsew')
@@ -475,24 +466,31 @@ class Admin:
                                 image_zoom_visibility=(5, 22),
                                 marker_color_circle="black",
                                 marker_color_outside="gray40", text=row[0],
-                                command=lambda here=row: self.askroomtk(here, mindate, maxdate))
+                                command=lambda row=row, mindate=mindate, maxdate=maxdate: self.askroomtk(row, mindate,
+                                                                                                         maxdate))
         for row in self.all_attractions:
             self.cord = row[1].split(' ')
             img = ImageTk.PhotoImage(Image.open(f'Attractions_images/{row[2]}').resize((150, 150)))
             marker = self.map.set_marker(float(self.cord[0]), float(self.cord[1]), image=img,
-                                image_zoom_visibility=(5, 22),
-                                marker_color_circle="white",
-                                marker_color_outside="gray40", command=lambda here=row: self.marker_interaction(here))
+                                         image_zoom_visibility=(5, 22),
+                                         marker_color_circle="white",
+                                         marker_color_outside="gray40",
+                                         command=lambda here=row: self.marker_interaction(here))
             marker.hide_image(True)
-        options = OptionMenu(self.root2, self.val, *["Price(ASC.)", "Price(DESC.)", "Proximity(ASC.)", *[attraction[0] for attraction in self.dict_closeby.keys()]], command=self.display_selected)
+        options = OptionMenu(self.root2, self.val, *["Price(ASC.)", "Price(DESC.)", "Proximity(ASC.)",
+                                                     *[attraction[0] for attraction in self.dict_closeby.keys()]],
+                             command=self.display_selected)
         options.grid(row=0, column=1, sticky='new', columnspan=2)
         self.orders2 = Listbox(self.root2, font=('Helvetica', 12), bg='#CCCCCC')
-        self.orders2.grid(row=0, column=1, columnspan=2,sticky='nsew', pady=30)
-        self.orders2.bind('<Double-1>', lambda event: [[self.map.set_address(sub[2]), self.map.set_zoom(10)] for sub in self.all if self.orders2.get(self.orders2.curselection()[0]) == sub[0]])
-        mode = Button(self.root2, command=lambda: self.change_map_mode(mode), text='Satellite' if mode == 'Normal' else 'Normal', font=('Helvetica', 11),
-                             cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
-                             activeforeground='#252221')
-        mode.grid(row=0, column=1,sticky="se")
+        self.orders2.grid(row=0, column=1, columnspan=2, sticky='nsew', pady=30)
+        self.orders2.bind('<Double-1>',
+                          lambda event: [[self.map.set_address(sub[2]), self.map.set_zoom(10)] for sub in self.all if
+                                         self.orders2.get(self.orders2.curselection()[0]) == sub[0]])
+        mode = Button(self.root2, command=lambda: self.change_map_mode(mode),
+                      text='Satellite' if mode == 'Normal' else 'Normal', font=('Helvetica', 11),
+                      cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
+                      activeforeground='#252221')
+        mode.grid(row=0, column=1, sticky="se")
         self.message = Entry(self.root2, bg='lightgray', fg='#252221',
                              font=("Helvetica", 15, 'bold'), width=60)  # user entry, sent to server
         self.message.grid(row=1, column=0, pady=10, sticky='we')
@@ -500,7 +498,7 @@ class Admin:
         self.close2 = Button(self.root2, command=self.close_map, text='Close', font=('Helvetica', 11),
                              cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
                              activeforeground='#252221')
-        self.close2.grid(row=1, column=2, pady=10,sticky='e')
+        self.close2.grid(row=1, column=2, pady=10, sticky='e')
         self.search = Button(self.root2, command=self.searchplace, text='Search', font=('Helvetica', 11),
                              cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
                              activeforeground='#252221')
@@ -509,7 +507,7 @@ class Admin:
         self.root2.mainloop()
 
     def close_map(self):
-        """closes the map and updates world activeness"""
+        """closes the map and updates world window activeness"""
         self.world_active = False
         self.root2.destroy()
 
@@ -523,10 +521,13 @@ class Admin:
         Label(right_frame, text="Location", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
         Label(right_frame, text="Radius", bg='#CCCCCC', font=f).grid(row=2, column=0, sticky=W, pady=10)
 
-        Button(right_frame, text="Choose image", command=lambda: self.addfile(marker_tk), font=f, bg='#252221', fg='lightgray',
+        Button(right_frame, text="Choose image", command=lambda: self.addfile(marker_tk), font=f, bg='#252221',
+               fg='lightgray',
                cursor='hand2',
                activebackground='lightgray', activeforeground='#252221').grid(row=3, column=0, sticky=W, pady=10)
-        location = Label(right_frame, text=f"{coords}\n{tkintermapview.convert_coordinates_to_city(float(coords[0]), float(coords[1]))}", bg='#CCCCCC', font=f)
+        location = Label(right_frame,
+                         text=f"{coords}\n{tkintermapview.convert_coordinates_to_city(float(coords[0]), float(coords[1]))}",
+                         bg='#CCCCCC', font=f)
         name = Entry(right_frame, font=f)
         radius = Entry(right_frame, font=f)
         self.message = Label(marker_tk, bg='#252221', font=f)
@@ -564,13 +565,14 @@ class Admin:
             self.message.config(text='No image selected', bg='#CCCCCC')
         else:
             shutil.copy(self.filename, f'Attractions_images/{self.filename[self.filename.rfind("/") + 1:]}')
-            self.client.send(f'ATTRACTION {coords[0]} {coords[1]}. {self.filename[self.filename.rfind("/") + 1:]}. {name}. {radius}'.encode())
+            self.client.send(
+                f'ATTRACTION {coords[0]} {coords[1]}. {self.filename[self.filename.rfind("/") + 1:]}. {name}. {radius}'.encode())
             self.sendimage()
             self.filename = ""
             marker_tk.destroy()
 
     def change_map_mode(self, mode):
-        """change the map mode to Sattellite or to Normal map"""
+        """change the map mode to Satellite or to Normal map"""
         if mode.cget('text') == "Satellite":
             self.clear(self.root2)
             self.worldrooms("Satellite", False)
@@ -581,7 +583,7 @@ class Admin:
     def distance(self, a):
         """distance between 2 points, used in proximity"""
         current = self.map.get_position()
-        return math.sqrt((float(a[0]) - current[0]) ** 2 + (float(a[1])-current[1]) ** 2)
+        return math.sqrt((float(a[0]) - current[0]) ** 2 + (float(a[1]) - current[1]) ** 2)
 
     def display_selected(self, choice):
         """builds all rooms according to choice given by Option menu"""
@@ -617,23 +619,25 @@ class Admin:
                     self.orders2.insert(END, item[0])
 
     def update_on_move(self, data):
-        """updates the Option menu on user movement"""
+        """updates the Option menu sorting on user movement"""
         last2 = None
         while 1:
-            if self.close:
-                break
-            sort = [i[0].split(' ') for i in data]
-            locations = sorted([s for s in sort], key=self.distance)
-            locations = [' '.join(i) for i in locations]
-            if locations != last2:
-                self.orders2.delete(0, END)
-                for location in locations:
-                    for place in self.all:
-                        if location in place:
-                            self.orders2.insert(END, place[0])
-                            break
-                last2 = locations
-            time.sleep(1)
+            try:
+                if self.close:
+                    break
+                sort = [i[0].split(' ') for i in data]
+                locations = sorted([s for s in sort], key=self.distance)
+                locations = [' '.join(i) for i in locations]
+                if locations != last2:
+                    self.orders2.delete(0, END)
+                    for location in locations:
+                        for place in self.all:
+                            if location in place:
+                                self.orders2.insert(END, place[0])
+                                break
+                    last2 = locations
+                time.sleep(0.5)
+            except: break
 
     def askroomtk(self, row, mindate, maxdate):
         """user's desired room details window"""
@@ -648,7 +652,7 @@ class Admin:
                     break
             self.root3 = Toplevel()
             self.root3.protocol("WM_DELETE_WINDOW", lambda: [self.removeinst(self.row),
-                                            self.root3.destroy(), self.reset_root3()])
+                                                             self.root3.destroy(), self.reset_root3()])
 
             self.root3.config(bg='#252221')
             self.client.send('OCC'.encode())
@@ -674,7 +678,8 @@ class Admin:
                 Label(right_frame, text="Rating", bg='#CCCCCC', font=f).grid(row=7, column=1, sticky=W, pady=10)
                 rating = Label(right_frame, text=f'{self.row[-2]} / 10', font=f, bg='#CCCCCC')
                 rating.grid(row=7, column=2, pady=10, padx=20)
-            self.where = Label(right_frame, text=f'{tkintermapview.convert_coordinates_to_address(float(cord[0]), float(cord[1])).street}',
+            self.where = Label(right_frame,
+                               text=f'{tkintermapview.convert_coordinates_to_address(float(cord[0]), float(cord[1])).street}',
                                font=f,
                                bg='#CCCCCC')
             self.recipient = Label(right_frame, text=f'{self.row[1]}', font=f, bg='#CCCCCC')
@@ -683,9 +688,11 @@ class Admin:
                                activeforeground='#252221')
             self.timer.grid(column=8, row=0, sticky=E)
             self.duration1 = DateEntry(right_frame, font=f, locale='en_IL', date_pattern='dd/mm/yyyy',
-                                       mindate=mindate if mindate > datetime.datetime.today() else datetime.datetime.today(), maxdate=maxdate, showweeknumbers=0)
+                                       mindate=mindate if mindate > datetime.datetime.today() else datetime.datetime.today(),
+                                       maxdate=maxdate, showweeknumbers=0)
             self.duration2 = DateEntry(right_frame, font=f, locale='en_IL', date_pattern='dd/mm/yyyy',
-                                       mindate=mindate if mindate > datetime.datetime.today() else datetime.datetime.today(), maxdate=maxdate, showweeknumbers=0)
+                                       mindate=mindate if mindate > datetime.datetime.today() else datetime.datetime.today(),
+                                       maxdate=maxdate, showweeknumbers=0)
             proceed = Button(right_frame,
                              width=15, text='Proceed', command=self.askroom, font=('Helvetica', 11), cursor='hand2',
                              bg='#252221', fg='lightgray',
@@ -734,41 +741,12 @@ class Admin:
 
     def askroom(self):
         """Informs server of desired room purchase"""
-        if self.__user[0] == 'Guest':
-            self.guestmail()
-        elif self.duration1.get_date() < self.duration2.get_date():
+        if self.duration1.get_date() < self.duration2.get_date():
             self.client.send('CHECK'.encode())
             self.client.send(pickle.dumps((self.row, self.duration1.get_date(), self.duration2.get_date())))
 
-    def guestmail(self):
-        """guest's information"""
-        self.marker_tk = Tk()
-        self.marker_tk.config(bg='#252221')
-        f = ('Helvetica', 14)
-        self.right_frame2 = Frame(self.marker_tk, bd=2, bg='#CCCCCC', padx=10, pady=10)
-        Label(self.right_frame2, text="Email", bg='#CCCCCC', font=f).grid(row=0, column=0, sticky=W, pady=10)
-        self.name = Entry(self.right_frame2, font=f)
-        submit = Button(self.right_frame2,
-                        command=lambda: self.submitguestname(self.name.get()),
-                        width=15, text='Submit', font=('Helvetica', 11), cursor='hand2', bg='#252221',
-                        fg='lightgray', activebackground='lightgray',
-                        activeforeground='#252221')
-        close = Button(self.right_frame2, command=self.marker_tk.destroy, text='Close', width=15, font=('Helvetica', 11),
-                       cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
-                       activeforeground='#252221')
-        self.name.grid(row=0, column=1, pady=10, padx=20)
-        close.grid(row=1, column=1, pady=10, padx=10)
-        submit.grid(row=1, column=0, pady=10, padx=10)
-        self.right_frame2.pack()
-        self.midwin(self.marker_tk, 500, 250)
-
-    def submitguestname(self, mail):
-        """sets user mail to guest's mail"""
-        self.__user[0] = mail
-        self.marker_tk.destroy()
-        self.askroom()
-
     def update_clock(self, c):
+        """update clock each second (shown on 60 seconds ask room window timer)"""
         flag = True
         if c >= 0:
             try:
@@ -783,30 +761,8 @@ class Admin:
         if flag:
             self.root.after(1000, lambda: self.update_clock(c - 1))
 
-    def register_send(self, name, email, country, pwd, pwd_again, message):
-        mail_re = re.compile('^[\w\.]+@([\w-]+\.)+[\w-]{2,4}$')
-        pass_re = re.compile("^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$")
-        if mail_re.match(email.get()) is None:
-            message.config(text="Invalid Email", bg='#CCCCCC')
-        elif len(name.get()) == 0:
-            message.config(text="Name should be something...", bg='#CCCCCC')
-        elif pass_re.match(pwd.get()) is None:
-            message.config(text="Invalid Password (8 characters with numbers)", bg='#CCCCCC')
-        elif pwd.get() != pwd_again.get():
-            message.config(text="Passwords don't match", bg='#CCCCCC')
-        else:
-            with open('countries.txt') as txt:
-                countries = txt.read().split('\n')
-            if country.get() not in countries:
-                message.config(text="Country doesn't exist", bg='#CCCCCC')
-            else:
-                self.client.send('CRED'.encode())
-                self.client.send(
-                    pickle.dumps([name.get(), email.get(), country.get(), pwd.get()]))
-                self.__attempt = pwd
-                self.reg.destroy()
-
     def change_date_tk(self):
+        """Change date window"""
         date_root = Tk()
         date_root.config(bg='lightgray')
         lb3 = Label(date_root, text='When would you like to change the date to?', font=("Helvetica", 15), bg='#252221',
@@ -833,6 +789,7 @@ class Admin:
         self.client.send(pickle.dumps(date))
 
     def login(self):
+        """login registered window, proceeds to loginsend for a check, user must be an admin"""
         self.root = Tk()
         self.root.protocol("WM_DELETE_WINDOW", self.pop)
         self.root.resizable(False, False)
@@ -840,7 +797,8 @@ class Admin:
         self.root.bind('<Return>', lambda event: [self.loginsend(email.get(), pwd.get(), message)])
         f = ('Helvetica', 14)
         right_frame = Frame(self.root, bd=2, bg='#CCCCCC', padx=10, pady=10)
-        Label(right_frame,width=10, text='Admin Login', bg='#252221', fg='#CCCCCC', font=f).grid(row=0, columnspan=2, sticky='nswe')
+        Label(right_frame, width=10, text='Admin Login', bg='#252221', fg='#CCCCCC', font=f).grid(row=0, columnspan=2,
+                                                                                                  sticky='nswe')
         Label(right_frame, text="Email", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
         Label(right_frame, text="Password", bg='#CCCCCC', font=f).grid(row=5, column=0, sticky=W, pady=10)
         email = Entry(right_frame, font=f)
@@ -864,13 +822,17 @@ class Admin:
         self.root.mainloop()
 
     def addroom(self):
-        """ Allows user to add a room """
+        """Add a new room window"""
         self.roomroot = Tk()
+        self.roomroot.resizable(False, False)
+        background_image = ImageTk.PhotoImage(Image.open(f'misc/addroom.jpg').resize((600, 480)), master=self.roomroot)
+        background_label = Label(self.roomroot, image=background_image)
+        background_label.place(x=0, y=0, relwidth=1, relheight=1)
         self.roomroot.config(bg='#252221')
         f = ('Helvetica', 14)
         var = StringVar()
-        Label(self.roomroot, text="Add a Room", bg='#CCCCCC', font=f).grid(row=0, column=0, sticky=W, pady=10)
-        right_frame = Frame(self.roomroot, bd=2, bg='#CCCCCC', padx=10, pady=10)
+        right_frame = Frame(self.roomroot, bd=2, bg='#CCCCCC', padx=10, pady=10, borderwidth=2, relief="ridge")
+        Label(right_frame, width=10, text='Add a Room', bg='#252221', fg='#CCCCCC', font=f).grid(row=0, columnspan=2,sticky='nsew')
         Label(right_frame, text="Room name", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
         Label(right_frame, text="Location", bg='#CCCCCC', font=f).grid(row=2, column=0, sticky=W, pady=10)
         Label(right_frame, text="Conditions", bg='#CCCCCC', font=f).grid(row=3, column=0, sticky=W, pady=10)
@@ -880,7 +842,7 @@ class Admin:
 
         Button(right_frame, text="Choose image", command=lambda: self.addfile(self.roomroot), font=f, bg='#252221', fg='lightgray',
                cursor='hand2',
-               activebackground='lightgray', activeforeground='#252221').grid(row=6, column=0, sticky=W, pady=10)
+               activebackground='lightgray', activeforeground='#252221').grid(row=7, column=0, sticky=W, pady=10)
 
         self.roomname = Entry(right_frame, font=f)
         self.location = Entry(right_frame, font=f)
@@ -898,40 +860,42 @@ class Admin:
         close = Button(right_frame, command=self.roomroot.destroy, text='Close', width=15, font=('Helvetica', 11),
                        cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
                        activeforeground='#252221')
-        self.message = Label(self.roomroot, bg='#252221', font=f)
+        self.message = Label(self.roomroot, bg='#252221', fg='lightgray', font=f , borderwidth=2, relief="ridge")
         self.roomname.grid(row=1, column=1, pady=10, padx=20)
         self.location.grid(row=2, column=1, pady=10, padx=20)
         self.conditions.grid(row=3, column=1, pady=10, padx=20)
         self.price.grid(row=4, column=1, pady=10, padx=20)
         self.duration1.grid(row=5, column=1, pady=10)
         self.duration2.grid(row=6, column=1, pady=10)
-        close.grid(row=7, column=1, pady=10, padx=10)
-        add.grid(row=7, column=0, pady=10, padx=10)
-        right_frame.grid()
-        self.message.grid(sticky=W, pady=10)
-        self.midwin(self.roomroot, 500, 480)
+        close.grid(row=8, column=1, pady=10, padx=10)
+        add.grid(row=8, column=0, pady=10, padx=10)
+        right_frame.grid(padx=75)
+        self.message.grid(sticky=W, pady=1, padx=75)
+
+        self.midwin(self.roomroot, 600, 480)
         self.roomroot.mainloop()
 
     def addfile(self, root):
+        """ choose an image file for an attraction\new room """
         root.attributes('-topmost', False)
         self.filename = filedialog.askopenfilename(filetypes=[('image files', '.png'), ('image files', '.jpg')], )
-        self.message.config(text=f'image: {self.filename}', bg='#CCCCCC')
+        self.message.config(text=f'Image: {self.filename[self.filename.rfind("/") + 1:]}')
         root.attributes('-topmost', True)
 
     def addsend(self):
-        """ sends added room data to server """
+        """ Sends data of room adding after done inspecting it """
         err = False
         try:
             self.filename
         except:
             self.filename = ''
         if self.filename == '':
-            self.message.config(text='No image selected', bg='#CCCCCC')
+            self.message.config(text='No image selected')
         elif self.duration1.get_date() >= self.duration2.get_date():
-            self.message.config(text='Invalid date range', bg='#CCCCCC')
+            self.message.config(text='Invalid date range')
         elif self.__user[0] != 'Guest':
             self.duration = (
-            self.duration1.get_date().strftime('%d/%m/%Y'), self.duration2.get_date().strftime('%d/%m/%Y'))
+                self.duration1.get_date().strftime('%d/%m/%Y'), self.duration2.get_date().strftime('%d/%m/%Y'))
             shutil.copy(self.filename, f'Images/{self.filename[self.filename.rfind("/") + 1:]}')
             temp = TkinterMapView()
             temp.set_address(self.location.get())
@@ -946,23 +910,23 @@ class Admin:
                         f' {self.conditions.get()}'.encode())
                     self.sendimage()
                     self.filename = ''
+
                 else:
-                    self.message.config(text='values must be valid', bg='#CCCCCC')
+                    self.message.config(text='values must be valid')
                     err = True
                 if not err:
                     self.roomroot.destroy()
             else:
-                self.message.config(text='Invalid place', bg='#CCCCCC')
+                self.message.config(text='Invalid place')
 
     def purchase_screen(self, total):
+        """showing total price calculated by server per night"""
         root7 = Toplevel()
         root7.config(bg='#252221')
         f = ('Helvetica', 14)
         right_frame3 = Frame(root7, bd=2, bg='#CCCCCC', padx=10, pady=10)
         Label(right_frame3, text="Total", bg='#CCCCCC', font=f).grid(row=0, column=0, sticky=W, pady=10)
-        # Label(right_frame3, text="Credit Card", bg='#CCCCCC', font=f).grid(row=1, column=0, sticky=W, pady=10)
         total_label = Label(right_frame3, text=f'{total}₪', font=f, bg='#CCCCCC')
-        # name = Entry(right_frame3, font=f)
         submit = Button(right_frame3,
                         command=lambda: self.commit_purchase(root7, total),
                         width=15, text='Submit', font=('Helvetica', 11), cursor='hand2', bg='#252221',
@@ -972,13 +936,12 @@ class Admin:
                        cursor='hand2', bg='#252221', fg='lightgray', activebackground='lightgray',
                        activeforeground='#252221')
         total_label.grid(row=0, column=1, pady=10, padx=20)
-        # name.grid(row=1, column=1, pady=10, padx=20)
         close.grid(row=1, column=1, pady=10, padx=10)
         submit.grid(row=1, column=0, pady=10, padx=10)
         right_frame3.pack()
 
     def commit_purchase(self, root7, total):
-        """Sends purchase query"""
+        """Sends BUY query to server with data given by user"""
         row = list(self.row)
         row[3] = total
         self.recorders.append(row)
@@ -992,10 +955,11 @@ class Admin:
         self.reset_root3()
         self.removeinst(self.row)
         self.row = None
+        self.root2.destroy()
         tkinter.messagebox.showinfo(message='Room bought')
 
     def loginsend(self, email, pwd, message):
-        """Sends to server the user's credentials, logs in attempt"""
+        """Sends to server the user's credentials as given by user, logs in attempt"""
         mail_re = re.compile('^[\w\.]+@([\w-]+\.)+[\w-]{2,4}$')
         pass_re = re.compile("^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$")
         if mail_re.match(email) is not None and pass_re.match(pwd) is not None:
@@ -1012,8 +976,8 @@ class Admin:
         self.root.destroy()
         self.login()
 
-    # Do you wish to exit the program entirely?
     def pop(self):
+        """Do you wish to exit the program entirely?"""
         popup = Tk()
         popup.resizable(False, False)
         popup.config(bg='lightgray')
@@ -1036,7 +1000,7 @@ class Admin:
         root.geometry('{}x{}+{}+{}'.format(x, y, a, b))
 
     def sendimage(self):
-        """Send an image selected by the user in adding a room"""
+        """Send an image selected by the user in adding a room or attraction"""
         with open(self.filename, 'rb') as txt:
             length = os.path.getsize(self.filename)
             send = pickle.dumps(length)
@@ -1048,6 +1012,7 @@ class Admin:
                 self.client.send(data)
 
     def users_data(self):
+        """all users data according to "registered" database"""
         root = Tk()
         root.bind('<Return>', lambda event: self.search_record(tree, message.get(), 'registered'))
         root.title('users')
@@ -1077,10 +1042,11 @@ class Admin:
                         font=("Helvetica", 15, 'bold'), width=60)
         message.grid(row=0, column=0, sticky=EW)
         search = Button(root,
-                       command=lambda: self.search_record(tree, message.get(), 'registered'), text='Search', font=('Helvetica', 11),
-                       cursor='hand2',
-                       bg='#252221', fg='lightgray', activebackground='lightgray',
-                       activeforeground='#252221')
+                        command=lambda: self.search_record(tree, message.get(), 'registered'), text='Search',
+                        font=('Helvetica', 11),
+                        cursor='hand2',
+                        bg='#252221', fg='lightgray', activebackground='lightgray',
+                        activeforeground='#252221')
         search.grid(column=1, row=0, pady=10)
         close = Button(root,
                        command=root.destroy, text='Close', width=15, font=('Helvetica', 11),
@@ -1096,9 +1062,12 @@ class Admin:
         self.midwin(root, 750, 325)
 
     def search_record(self, tree, record, database):
+        """search for a specific record everywhere in database"""
         conn = sqlite3.connect(f'Databases/{database}.db')
         if database == 'registered':
-            all_data = conn.execute('SELECT * FROM Registered WHERE Email="{0}" OR Fullname="{0}" OR Country="{0}" OR Password="{0}" OR Admin="{0}"'.format(record)).fetchall()
+            all_data = conn.execute(
+                'SELECT * FROM Registered WHERE Email="{0}" OR Fullname="{0}" OR Country="{0}" OR Password="{0}" OR Admin="{0}"'.format(
+                    record)).fetchall()
             conn.commit()
             conn.close()
             tree.delete(*tree.get_children())
@@ -1115,25 +1084,30 @@ class Admin:
                 tree.insert('', END, values=data)
 
     def make_admin(self, tree, root):
+        """make an admin tk window, called upon choosing a record in user_data function"""
         selected = tree.item(tree.selection())["values"]
         if selected and selected[4] != 1:
             admin_tk = Tk()
             admin_tk.resizable(False, False)
             admin_tk.config(bg='lightgray')
-            lb3 = Label(admin_tk, text=f'Do you wish to make {selected[0]} an Admin?', font=("Helvetica", 15), bg='#252221', fg='lightgray')
+            lb3 = Label(admin_tk, text=f'Do you wish to make {selected[0]} an Admin?', font=("Helvetica", 15),
+                        bg='#252221', fg='lightgray')
             lb3.pack(fill=BOTH)
             # Destroy both popup and root windows
             yes = Button(admin_tk, text='Yes', command=lambda: [self.client.send(f"MAKE {selected[1]}".encode()),
                                                                 admin_tk.destroy(), root.destroy()], bg='#252221',
-                         fg='lightgray', activebackground='lightgray', activeforeground='#252221', padx=10, cursor='hand2')
+                         fg='lightgray', activebackground='lightgray', activeforeground='#252221', padx=10,
+                         cursor='hand2')
             yes.pack(pady=10, side=RIGHT)
 
-            no = Button(admin_tk, text='No', command=admin_tk.destroy, bg='#252221', fg='lightgray', activebackground='lightgray',
+            no = Button(admin_tk, text='No', command=admin_tk.destroy, bg='#252221', fg='lightgray',
+                        activebackground='lightgray',
                         activeforeground='#252221', padx=10, cursor='hand2')  # Destroy popup window
             no.pack(pady=10, side=RIGHT)
             self.midwin(admin_tk, 350, 80)  # place window in the center
 
     def offers_data(self):
+        """all offers data according to the public "database" database"""
         root = Tk()
         root.bind('<Return>', lambda event: self.search_record(tree, message.get(), 'database'))
         root.title('users')
@@ -1143,7 +1117,7 @@ class Admin:
         # define columns
         columns = ('RoomName', 'By', 'Coordinates', 'Price', 'First', 'Last', 'ImagePath', 'RATING', 'Conditions')
 
-        tree = ttk.Treeview(root, columns=columns, show='headings',)
+        tree = ttk.Treeview(root, columns=columns, show='headings', )
         tree.grid(row=1, column=0, sticky='nsew')
 
         # define headings
@@ -1166,15 +1140,15 @@ class Admin:
         tree.heading('Conditions', text='Conditions')
         tree.column('Conditions', width=20)
 
-
         message = Entry(root, bg='lightgray', fg='#252221',
                         font=("Helvetica", 15, 'bold'), width=60)
         message.grid(row=0, column=0, sticky=EW)
         search = Button(root,
-                       command=lambda: self.search_record(tree, message.get(),'database'), text='Search', font=('Helvetica', 11),
-                       cursor='hand2',
-                       bg='#252221', fg='lightgray', activebackground='lightgray',
-                       activeforeground='#252221')
+                        command=lambda: self.search_record(tree, message.get(), 'database'), text='Search',
+                        font=('Helvetica', 11),
+                        cursor='hand2',
+                        bg='#252221', fg='lightgray', activebackground='lightgray',
+                        activeforeground='#252221')
         search.grid(column=1, row=0, pady=10)
         close = Button(root,
                        command=root.destroy, text='Close', width=15, font=('Helvetica', 11),
@@ -1191,7 +1165,6 @@ class Admin:
 
 
 if __name__ == '__main__':
-
     print('___INITIALIZING___')
     try:
         a = Admin()

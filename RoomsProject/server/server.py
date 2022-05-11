@@ -19,9 +19,14 @@ file = __file__
 
 class Server:
     def __init__(self):
+        """Base creation of all essential variables and use of functions"""
+        if not os.path.exists('Images/'):
+            os.makedirs('Images/')
+        if not os.path.exists('Attractions_images/'):
+            os.makedirs('Attractions_images/')
         self.server = socket(AF_INET, SOCK_STREAM)
         self.server = ssl.wrap_socket(self.server, server_side=True, keyfile='privkey.pem', certfile='certificate.pem')
-        self.server.bind(('172.16.188.125', 50000))
+        self.server.bind(('127.0.0.1', 50000))
         self.server.listen(5)
         self.servertime = datetime.datetime.today().date()
         self.readables = [self.server]
@@ -33,32 +38,23 @@ class Server:
         self.occ = []
         self.conn = sqlite3.connect('Databases/registered.db')
         self.conn.cursor().execute('CREATE TABLE IF NOT EXISTS Registered(Fullname TEXT, Email TEXT,'
-                            ' Country TEXT, Password TEXT, Admin BIT);')
+                                   ' Country TEXT, Password TEXT, Admin BIT);')
         self.conn.cursor().execute('CREATE TABLE IF NOT EXISTS Bought(RoomName TEXT, '
-                             'Buyer TEXT, First TEXT, Last TEXT, RATING INT, TOTAL INT);')
+                                   'Buyer TEXT, First TEXT, Last TEXT, RATING INT, TOTAL INT);')
         self.conn.close()
         self.conn = sqlite3.connect('Databases/database.db')
         self.conn.cursor().execute('CREATE TABLE IF NOT EXISTS Offered(RoomName TEXT,By TEXT, Coordinates TEXT,'
-                             ' Price INT, First TEXT, Last TEXT, ImagePath TEXT, RATING INT, Conditions TEXT);')
-        self.conn.cursor().execute('CREATE TABLE IF NOT EXISTS Attractions(Name TEXT,Coordinates TEXT, ImagePath TEXT, Radius INT);')
+                                   ' Price INT, First TEXT, Last TEXT, ImagePath TEXT, RATING INT, Conditions TEXT);')
+        self.conn.cursor().execute(
+            'CREATE TABLE IF NOT EXISTS Attractions(Name TEXT,Coordinates TEXT, ImagePath TEXT, Radius INT);')
         self.conn.close()
-        if not os.path.exists('Images/'):
-            os.makedirs('Images/')
-        if not os.path.exists('Attractions_images/'):
-            os.makedirs('Attractions_images/')
         self.lst = os.listdir('Images/')
         self.att_lst = os.listdir('Attractions_images/')
-        _thread.start_new_thread(self.current_time, ())
         threading.Thread(target=self.listen).start()
         print('LISTENING ON 50000')
 
-    def current_time(self):
-        while 1:
-            time.sleep(1)
-            if datetime.datetime.today().date() > self.servertime:
-                self.servertime = datetime.datetime.today().date()
-
     def send_database(self, sock, name):
+        """send database by its name to a user"""
         filename = f'Databases/{name}.db'
         with open(filename, 'rb') as txt:
             length = os.path.getsize(filename)
@@ -66,13 +62,14 @@ class Server:
             sock.send(send)
             s = 0
             while s != length:
-                    data = txt.read(self.BUF)
-                    s += len(data)
-                    sock.send(data)
+                data = txt.read(self.BUF)
+                s += len(data)
+                sock.send(data)
         sock.send('DATE'.encode())
         sock.send(pickle.dumps(self.servertime))
 
     def getfile(self, sock, name):
+        """get image from user"""
         data = sock.recv(self.BUF)
         img = pickle.loads(data)
         s = 0
@@ -83,6 +80,7 @@ class Server:
                 s += len(data2)
 
     def get_attraction_file(self, sock, name):
+        """get attraction image from admin"""
         data = sock.recv(self.BUF)
         img = pickle.loads(data)
         s = 0
@@ -93,11 +91,13 @@ class Server:
                 s += len(data2)
 
     def timer(self, row):
+        """timer starts in case of room being watched by user (60 seconds unless was closed beforehand)"""
         time.sleep(60)
         if row in self.occ:
             self.occ.remove(row)
 
     def listen(self):
+        """listens to all, most of the client interactions are made here"""
         while 1:
             read, write, ex = select.select(self.readables, self.writeables, [])
             for sock in read:
@@ -117,6 +117,7 @@ class Server:
                         self.readables.remove(sock)
                         self.writeables.remove(sock)
                         if sock in self.admin_dict.values():
+                            remove = None
                             for key, value in self.admin_dict.items():
                                 if sock == value:
                                     remove = key
@@ -128,6 +129,7 @@ class Server:
                         self.readables.remove(sock)
                         self.writeables.remove(sock)
                         if sock in self.admin_dict.values():
+                            remove = None
                             for key, value in self.admin_dict.items():
                                 if sock == value:
                                     remove = key
@@ -165,11 +167,12 @@ class Server:
                         data = pickle.loads(sock.recv(self.BUF))
                         self.conn2 = sqlite3.connect('Databases/registered.db')
                         self.conn2.cursor().execute('INSERT INTO Bought(RoomName, Buyer, First, Last, TOTAL)  '
-                                              'VALUES(?,?,?,?,?)',
-                                       (data[0], data[-1], data[4], data[5], data[3]))
+                                                    'VALUES(?,?,?,?,?)',
+                                                    (data[0], data[-1], data[4], data[5], data[3]))
                         self.conn2.commit()
                         self.conn2.close()
-                        _thread.start_new_thread(self.inform_admins, ())  # inform all admins on room purchase (db content)
+                        _thread.start_new_thread(self.inform_admins,
+                                                 ())  # inform all admins on room purchase (db content)
                     elif datacontent == 'OCC':
                         data = sock.recv(self.BUF)
                         data = pickle.loads(data)
@@ -187,7 +190,8 @@ class Server:
                         data = sock.recv(self.BUF)
                         data = pickle.loads(data)
                         self.conn = sqlite3.connect('Databases/registered.db')
-                        self.conn.cursor().execute(f'DELETE FROM Bought WHERE RoomName=? AND Buyer=?;', (data[0], data[-1]))
+                        self.conn.cursor().execute(f'DELETE FROM Bought WHERE RoomName=? AND Buyer=?;',
+                                                   (data[0], data[-1]))
                         self.conn.commit()
                         self.conn.close()
                         _thread.start_new_thread(self.inform_admins, ())
@@ -216,6 +220,7 @@ class Server:
                         self.make_admin(user)
 
     def make_admin(self, user):
+        """make user an admin by an admin command"""
         conn = sqlite3.connect('Databases/registered.db')
         conn.execute(f'UPDATE Registered SET Admin=1 WHERE Email="{user}"')
         conn.commit()
@@ -223,6 +228,7 @@ class Server:
         _thread.start_new_thread(self.admins_broadcast, ())
 
     def add_attraction(self, values):
+        """add an attraction with information given by admin"""
         conn = sqlite3.connect('Databases/database.db')
         cursor = conn.cursor()
         cursor.execute(
@@ -232,11 +238,13 @@ class Server:
         conn.close()
 
     def admins_broadcast(self):
+        """broadcast all admins updating on database change"""
         for admin in self.admin_dict.values():
             admin.send('PUSH'.encode())
             self.send_database(admin, 'registered')
 
     def inform_admins(self):
+        """update admins on data change (not sending database itself, data only)"""
         conn = sqlite3.connect('Databases/registered.db')
         cursor = conn.cursor().execute('SELECT * FROM Bought')
         all_orders = cursor.fetchall()
@@ -249,6 +257,7 @@ class Server:
             if rec is not None:
                 rec = list(rec)
                 rec[4], rec[5] = i[2], i[3]  # dates purchased by user
+                rec[3] = i[5]  # update price to total
                 rec.append(i[1])
                 _all.append(rec)
         conn.close()
@@ -257,6 +266,7 @@ class Server:
             admin.send(pickle.dumps(_all))
 
     def check_dates(self, row, start, finish, sock):
+        """check if dates are available for purchase, sent by user to check room availability"""
         total = -row[3]  # start at deficit
         conn = sqlite3.connect('Databases/registered.db')
         cursor = conn.cursor().execute('SELECT First, Last FROM Bought WHERE RoomName=?', (row[0],))
@@ -281,6 +291,7 @@ class Server:
         sock.send(pickle.dumps((flag, total)))
 
     def broadcast_files(self):
+        """broadcasts images, database to all clients"""
         self.lst = os.listdir('Images/')
         self.att_lst = os.listdir('Attractions_images/')
         for sock in self.writeables:
@@ -312,17 +323,20 @@ class Server:
                 self.send_database(sock, 'database')
 
     def user_rate(self, rec, sock, specific_order):
-        for order in range(len(rec)):
-            dur = datetime.datetime.strptime(rec[order][5], '%d/%m/%Y')
-            if self.servertime > dur.date() and specific_order[order][4] is None:
-                sock.send('RATE'.encode())
-                sock.send(pickle.dumps(rec[order]))
+        """for each connected user, RATE will be sent, awaiting answer RATING from client"""
+        if rec is not None:  # User bought a room
+            for order in range(len(rec)):
+                dur = datetime.datetime.strptime(rec[order][5], '%d/%m/%Y')
+                if self.servertime > dur.date() and specific_order[order][4] is None:
+                    sock.send('RATE'.encode())
+                    sock.send(pickle.dumps(rec[order]))
 
     def update_total_rating(self, name):
         """Update total rating of a room in the Offered table based on purchases"""
 
         self.conn = sqlite3.connect('Databases/registered.db')
-        all_rates = self.conn.cursor().execute('SELECT RATING FROM Bought WHERE RoomName=? AND RATING IS NOT NULL;', (name,)).fetchall()
+        all_rates = self.conn.cursor().execute('SELECT RATING FROM Bought WHERE RoomName=? AND RATING IS NOT NULL;',
+                                               (name,)).fetchall()
         self.conn.close()
         self.conn = sqlite3.connect('Databases/database.db')
         subtotal = 0  # all ratings combined
@@ -337,18 +351,19 @@ class Server:
             self.conn.close()
 
     def loginuser(self, cred, sock, flag):
+        print(cred)
         """ Checks validity of credentials sent by client """
         all_orders = None
         self.conn = sqlite3.connect('Databases/registered.db')
         cursor = self.conn.cursor().execute('SELECT * FROM Registered WHERE Email=? AND Password=?',
-                                             (cred[0], cred[1]))
+                                            (cred[0], cred[1]))
         self.conn.commit()
         data = cursor.fetchone()
         if data is None or len(data) == 0:
             sock.send('Error: Not Found'.encode())
             return None, None, None, None
         if flag:
-            sock.send(f'Success {cred[0]}'.encode())
+            sock.send(f'Success {cred[0]} {data[0]}'.encode())
         cursor = self.conn.cursor().execute(f'SELECT * FROM Bought WHERE Buyer="{cred[0]}"')
         _all = cursor.fetchall()
         self.conn.close()
@@ -384,12 +399,14 @@ class Server:
         return data, ret, _all, ret_all
 
     def broadcast_new_date(self, date):
+        """Broadcasts new dates to all connected users on date update"""
         for sock in self.writeables:
             if sock != self.server:
                 sock.send('DATE'.encode())
                 sock.send(pickle.dumps(date))
 
     def registeruser(self, cred, sock):
+        """adds new user to registered db according to client sent information (Called upon CRED)"""
         self.conn = sqlite3.connect('Databases/registered.db')
         cursor = self.conn.cursor()
         cursor2 = self.conn.cursor().execute(f'SELECT * FROM Registered WHERE Email=?', (cred[2],))
@@ -398,7 +415,7 @@ class Server:
         if len(data) != 0:
             sock.send('Error: User Found'.encode())
             return
-        sock.send(f'Success {cred[0]}'.encode())
+        sock.send(f'Success {cred[1], cred[0]}'.encode())
         cursor.execute(
             'INSERT INTO Registered (Fullname, Email, Country, Password, Admin) VALUES (?,?,?,?,0)',
             (cred[0], cred[1], cred[2], cred[3]))
@@ -427,6 +444,7 @@ class Server:
         _thread.start_new_thread(self.broadcast_files, ())
 
     def sendimages(self, sock):
+        """Sends all images to a client"""
         for name in self.lst:
             with open(f'Images/{name}', 'rb') as txt:
                 length = os.path.getsize(f'Images/{name}')

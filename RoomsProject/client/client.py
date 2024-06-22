@@ -150,6 +150,7 @@ class Client:
                         else:
                             tkinter.messagebox.showinfo(self.root3, message='The selected date is taken')
                             self.removeinst(self.row)
+                    print("DONE, don't worry about the error shown")
                 except:
                     tkinter.messagebox.showinfo(message='Please use Admin interface')
                     self.root.destroy()
@@ -194,8 +195,8 @@ class Client:
                                     image_zoom_visibility=(5, 22),
                                     marker_color_circle="black",
                                     marker_color_outside="gray40", text=row[0],
-                                    command=lambda row=row, mindate=mindate,
-                                                   maxdate=maxdate: self.askroomtk(row, mindate, maxdate))
+                                    command=lambda r=row, mi=mindate,
+                                                   ma=maxdate: self.askroomtk(r, mi, ma))
         for row in self.all_attractions:
             self.cord = row[1].split(' ')
             img = ImageTk.PhotoImage(Image.open(f'Attractions_images/{row[2]}').resize((150, 150)),
@@ -384,14 +385,17 @@ class Client:
                        bg='#252221', fg='lightgray', activebackground='lightgray',
                        activeforeground='#252221')
         close.grid(row=3, column=5, sticky=E)
+
+        # ===WIP===
         # menus
-        menu = Menu(self.root)
-        filemenu = Menu(menu, tearoff=0)
-        filemenu.add_command(label='Help')
-        filemenu.add_separator()
-        filemenu.add_command(label='Exit', command=self.pop)
-        menu.add_cascade(label="More", menu=filemenu)
-        self.root.config(menu=menu, bg='lightgray')
+        # menu = Menu(self.root)
+        # filemenu = Menu(menu, tearoff=0)
+        # filemenu.add_command(label='Help')
+        # filemenu.add_separator()
+        # filemenu.add_command(label='Exit', command=self.pop)
+        # menu.add_cascade(label="More", menu=filemenu)
+        # self.root.config(menu=menu, bg='lightgray')
+
         self.midwin(self.root, 900, 500)
         self.root.mainloop()
 
@@ -400,12 +404,15 @@ class Client:
         self.map.set_address(self.message.get())
         self.message.delete(0, END)
 
+    # main map view in respect to given mode
     def worldrooms(self, mode, flag):
         """Map of the world showing all locations added and ready / not ready for purchase"""
-        self.world_active = True
-        if flag:  # should a new window be opened?
+        self.world_active = True  # notifies that map is set to open
+
+        if flag:  # decides whether new window should be opened
             self.root2 = Toplevel()
             self.root2.protocol("WM_DELETE_WINDOW", self.close_map)
+
         self.root2.grid_columnconfigure(0, weight=1)
         self.root2.grid_columnconfigure(1, weight=1)
         self.root2.grid_rowconfigure(0, weight=1)
@@ -414,19 +421,27 @@ class Client:
         self.root2.bind('<Return>', self.searchplace)
         self.root2.config(bg='lightgray')
         self.root2.geometry('800x600')
-        self.map = TkinterMapView(self.root2, width=800, height=550, corner_radius=0)
+
+        self.map = TkinterMapView(self.root2, width=800, height=550, corner_radius=0)  # main map view initialization
+
+        # changes the map to google map view
         self.map.set_tile_server("https://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}&s=Ga", max_zoom=22) \
             if mode == 'Normal' else self.map.set_tile_server(
             "https://mt0.google.com/vt/lyrs=s&hl=en&x={x}&y={y}&z={z}&s=Ga", max_zoom=22)
-        self.map.set_address('Israel')
-        self.map.set_zoom(7)
+
+        self.map.set_address('Israel')  # set address to Israel
+
+        self.map.set_zoom(7)  # set zoom to a reasonable level
         self.map.grid(row=0, column=0, sticky='nsew')
-        conn = sqlite3.connect('Databases/database.db')
+
+        conn = sqlite3.connect('Databases/database.db')  # establish connection to local SQL database
+
         cursor = conn.cursor().execute('SELECT * FROM Offered')
         self.all = cursor.fetchall()
         cursor = conn.cursor().execute('SELECT * FROM Attractions')
         self.all_attractions = cursor.fetchall()
         conn.close()
+
         self.dict_closeby = dict.fromkeys(self.all_attractions, [])
         for attraction in self.all_attractions:
             self.dict_closeby[attraction] = []
@@ -434,6 +449,7 @@ class Client:
             for place in self.all:
                 if self.check_radius(place, attraction):
                     self.dict_closeby[attraction].append(place)
+
         for row in self.all:
             self.cord = row[2].split(' ')
             try:
@@ -442,16 +458,18 @@ class Client:
                     maxdate = row[5].split('/')
                     mindate = datetime.datetime(int(mindate[2]), int(mindate[1]), int(mindate[0]))
                     maxdate = datetime.datetime(int(maxdate[2]), int(maxdate[1]), int(maxdate[0]))
-                    img = ImageTk.PhotoImage(Image.open(f'Images/{row[6]}').resize((150, 150)), master=self.root2)
-                    self.map.set_marker(float(self.cord[0]), float(self.cord[1]), image=img,
-                                        image_zoom_visibility=(5, 22),
-                                        marker_color_circle="black",
-                                        marker_color_outside="gray40", text=row[0],
-                                        command=lambda row=row, mindate=mindate, maxdate=maxdate: self.askroomtk(row,
-                                                                                                                 mindate,
-                                                                                                                 maxdate))
+
+                    if not maxdate < datetime.datetime.today():  # show if attraction is not expired
+                        img = ImageTk.PhotoImage(Image.open(f'Images/{row[6]}').resize((150, 150)), master=self.root2)
+                        self.map.set_marker(float(self.cord[0]), float(self.cord[1]), image=img,
+                                            image_zoom_visibility=(5, 22),
+                                            marker_color_circle="black",
+                                            marker_color_outside="gray40", text=row[0],
+                                            command=lambda r=row, mi=mindate, ma=maxdate: self.askroomtk(r, mi, ma))
             except:
                 pass  # len of self.recorders is probably 0
+
+        # show attraction and their respective coordinates
         for row in self.all_attractions:
             self.cord = row[1].split(' ')
             img = ImageTk.PhotoImage(Image.open(f'Attractions_images/{row[2]}').resize((150, 150)), master=self.root2)
@@ -459,7 +477,7 @@ class Client:
                                          image_zoom_visibility=(5, 22),
                                          marker_color_circle="white",
                                          marker_color_outside="gray40",
-                                         command=lambda row=row: self.marker_interaction(row))
+                                         command=lambda r=row: self.marker_interaction(r))
             marker.hide_image(True)
 
         self.options = OptionMenu(self.root2, self.val, *["Price(ASC.)", "Price(DESC.)", "Proximity(ASC.)",
@@ -545,10 +563,16 @@ class Client:
 
     def askroomtk(self, row, mindate, maxdate):
         """user's desired room details window"""
+
+        if maxdate < datetime.datetime.today():
+            print("EXPIRED")
+            return
+
         try:  # does an active root exist?
             self.root3
         except:
             self.root3 = None
+
         if self.root3 is None:
             for i in self.all:
                 if i[2].split(' ')[0] == str(row.position[0]) and i[2].split(' ')[1] == str(row.position[1]):
@@ -558,7 +582,7 @@ class Client:
             self.root3.protocol("WM_DELETE_WINDOW", lambda: [self.removeinst(self.row),
                                                              self.root3.destroy(), self.reset_root3()])
             self.root3.config(bg='#252221')
-            self.client.send('OCC'.encode())
+            self.client.send('OCC'.encode())  # send an occupied message to server
             self.client.send(pickle.dumps(self.row))
             f = ('Helvetica', 14)
             right_frame = Frame(self.root3, bd=2, bg='#CCCCCC', padx=10, pady=10)
@@ -594,6 +618,7 @@ class Client:
             self.duration1 = DateEntry(right_frame, font=f, locale='en_IL', date_pattern='dd/mm/yyyy',
                                        mindate=mindate if mindate > datetime.datetime.today() else datetime.datetime.today(),
                                        maxdate=maxdate, showweeknumbers=0)
+
             self.duration2 = DateEntry(right_frame, font=f, locale='en_IL', date_pattern='dd/mm/yyyy',
                                        mindate=mindate if mindate > datetime.datetime.today() else datetime.datetime.today(),
                                        maxdate=maxdate, showweeknumbers=0)

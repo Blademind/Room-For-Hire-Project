@@ -765,7 +765,7 @@ class Admin:
         """Change date window"""
         date_root = Tk()
         date_root.config(bg='lightgray')
-        lb3 = Label(date_root, text='When would you like to change the date to?', font=("Helvetica", 15), bg='#252221',
+        lb3 = Label(date_root, text='Change server date to?', font=("Helvetica", 15), bg='#252221',
                     fg='lightgray')
         lb3.pack(fill=BOTH)
         dates = DateEntry(date_root, font=('Helvetica', 14), locale='en_IL', date_pattern='dd/mm/yyyy',
